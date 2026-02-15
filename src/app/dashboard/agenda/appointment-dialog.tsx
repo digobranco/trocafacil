@@ -104,12 +104,12 @@ export function AppointmentDialog({ selectedDate, selectedTime, defaultProfessio
                         description: s.description
                     }))
                     setFormData(prev => ({ ...prev, services }))
-                    // Reset service selection if currently selected service is not available
-                    if (serviceId && !services.find(s => s.id === serviceId)) {
-                        setServiceId('')
-                    }
+                    // ALWAYS reset service selection when professional changes
+                    setServiceId('')
                 } catch (error) {
                     console.error('Error loading professional services:', error)
+                    setFormData(prev => ({ ...prev, services: [] }))
+                    setServiceId('')
                 }
             } else {
                 // If no professional selected, load all services
@@ -204,23 +204,6 @@ export function AppointmentDialog({ selectedDate, selectedTime, defaultProfessio
                     )}
 
                     <div className="grid grid-cols-4 items-center gap-4">
-                        <Label className="text-right">Serviço *</Label>
-                        <Select value={serviceId} onValueChange={setServiceId}>
-                            <SelectTrigger className="col-span-3">
-                                <SelectValue placeholder="Selecione o serviço" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {formData.services.map((s: any) => (
-                                    <SelectItem key={s.id} value={s.id}>
-                                        {s.name} ({s.duration_minutes} min)
-                                        {s.price && ` - R$ ${s.price.toFixed(2)}`}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    <div className="grid grid-cols-4 items-center gap-4">
                         <Label className="text-right">Profissional *</Label>
                         <Select value={professionalId} onValueChange={setProfessionalId}>
                             <SelectTrigger className="col-span-3">
@@ -230,6 +213,27 @@ export function AppointmentDialog({ selectedDate, selectedTime, defaultProfessio
                                 {formData.professionals.map((p) => (
                                     <SelectItem key={p.id} value={p.id}>
                                         {p.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label className="text-right">Serviço *</Label>
+                        <Select
+                            value={serviceId}
+                            onValueChange={setServiceId}
+                            disabled={!professionalId}
+                        >
+                            <SelectTrigger className="col-span-3">
+                                <SelectValue placeholder={professionalId ? "Selecione o serviço" : "Selecione um profissional primeiro"} />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {formData.services.map((s: any) => (
+                                    <SelectItem key={s.id} value={s.id}>
+                                        {s.name} ({s.duration_minutes} min)
+                                        {s.price && ` - R$ ${s.price.toFixed(2)}`}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
@@ -326,7 +330,17 @@ export function AppointmentDialog({ selectedDate, selectedTime, defaultProfessio
                     )}
 
                     <div className="flex justify-end pt-4">
-                        <Button type="submit" disabled={loading}>
+                        <Button
+                            type="submit"
+                            disabled={
+                                loading ||
+                                !customerId ||
+                                !professionalId ||
+                                !serviceId ||
+                                !date ||
+                                !time
+                            }
+                        >
                             {loading ? 'Salvando...' : 'Agendar'}
                         </Button>
                     </div>

@@ -23,16 +23,43 @@ export async function createAppointment(data: CreateAppointmentData) {
 
     const { supabase, tenantId, role } = ctx
 
-    // Get service duration
-    const { data: service } = await supabase
-        .from('services')
-        .select('duration_minutes')
-        .eq('id', data.serviceId)
+    // SECURITY: Validate that the service is actually linked to this professional
+    const { data: professionalService, error: psError } = await supabase
+        .from('professional_services')
+        .select('id')
+        .eq('professional_id', data.professionalId)
+        .eq('service_id', data.serviceId)
+        .eq('is_active', true)
+        .maybeSingle()
+
+    if (psError) {
+        console.error('Error validating professional service:', psError)
+        return { error: 'Erro ao validar serviço do profissional.' }
+    }
+
+    if (!professionalService) {
+        return { error: 'O serviço selecionado não está disponível para este profissional.' }
+    }
+
+    // Get service duration (use custom duration if set, otherwise default)
+    const { data: serviceData } = await supabase
+        .from('professional_services')
+        .select(`
+            custom_duration_minutes,
+            services (
+                duration_minutes
+            )
+        `)
+        .eq('professional_id', data.professionalId)
+        .eq('service_id', data.serviceId)
         .single()
 
-    if (!service) {
+    if (!serviceData) {
         return { error: 'Serviço não encontrado.' }
     }
+
+    const service = serviceData.services as unknown as { duration_minutes: number }
+    const durationMinutes = serviceData.custom_duration_minutes ?? service.duration_minutes
 
     // Parse date and time
     const [year, month, day] = data.date.split('-').map(Number)
@@ -125,7 +152,7 @@ export async function createAppointment(data: CreateAppointmentData) {
 
             if (startTime < new Date()) continue
 
-            const endTime = new Date(startTime.getTime() + service.duration_minutes * 60000)
+            const endTime = new Date(startTime.getTime() + durationMinutes * 60000)
 
             appointments.push({
                 tenant_id: tenantId,
