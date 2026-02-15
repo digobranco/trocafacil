@@ -10,8 +10,9 @@ import {
 import { ProfessionalDialog } from './professional-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Pencil } from 'lucide-react'
+import { Pencil, Settings } from 'lucide-react'
 import { checkRole } from '@/utils/roles'
+import Link from 'next/link'
 
 export default async function ProfessionalsPage() {
     await checkRole(['admin']) // Only admins organize the team initially
@@ -71,14 +72,21 @@ export default async function ProfessionalsPage() {
                                     </Badge>
                                 </TableCell>
                                 <TableCell className="text-right">
-                                    <ProfessionalDialog
-                                        professional={professional}
-                                        trigger={
+                                    <div className="flex justify-end gap-2">
+                                        <Link href={`/dashboard/profissionais/${professional.id}/servicos`}>
                                             <Button variant="ghost" size="sm">
-                                                <Pencil className="h-3 w-3 mr-1" /> Editar
+                                                <Settings className="h-3 w-3 mr-1" /> Serviços
                                             </Button>
-                                        }
-                                    />
+                                        </Link>
+                                        <ProfessionalDialog
+                                            professional={professional}
+                                            trigger={
+                                                <Button variant="ghost" size="sm">
+                                                    <Pencil className="h-3 w-3 mr-1" /> Editar
+                                                </Button>
+                                            }
+                                        />
+                                    </div>
                                 </TableCell>
                             </TableRow>
                         ))}

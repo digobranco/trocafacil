@@ -23,6 +23,7 @@ import { Plus, CalendarPlus, Repeat } from 'lucide-react'
 import { createAppointment, getAppointmentFormData } from './appointment-actions'
 import { getCurrentUser } from './actions'
 import { format } from 'date-fns'
+import { getAvailableServices } from '../profissionais/[id]/servicos/actions'
 
 interface AppointmentDialogProps {
     selectedDate?: Date
@@ -87,6 +88,40 @@ export function AppointmentDialog({ selectedDate, selectedTime, defaultProfessio
             setCustomerId(userData.customer_id || '')
         }
     }
+
+    // Load services when professional is selected
+    useEffect(() => {
+        async function loadProfessionalServices() {
+            if (professionalId) {
+                try {
+                    const availableServices = await getAvailableServices(professionalId)
+                    // Map to match formData structure
+                    const services = availableServices.map(s => ({
+                        id: s.id,
+                        name: s.name,
+                        duration_minutes: s.durationMinutes,
+                        price: s.price,
+                        description: s.description
+                    }))
+                    setFormData(prev => ({ ...prev, services }))
+                    // Reset service selection if currently selected service is not available
+                    if (serviceId && !services.find(s => s.id === serviceId)) {
+                        setServiceId('')
+                    }
+                } catch (error) {
+                    console.error('Error loading professional services:', error)
+                }
+            } else {
+                // If no professional selected, load all services
+                const formFields = await getAppointmentFormData()
+                setFormData(prev => ({ ...prev, services: formFields.services }))
+            }
+        }
+
+        if (open) {
+            loadProfessionalServices()
+        }
+    }, [professionalId, open, serviceId])
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
@@ -175,9 +210,10 @@ export function AppointmentDialog({ selectedDate, selectedTime, defaultProfessio
                                 <SelectValue placeholder="Selecione o serviço" />
                             </SelectTrigger>
                             <SelectContent>
-                                {formData.services.map((s) => (
+                                {formData.services.map((s: any) => (
                                     <SelectItem key={s.id} value={s.id}>
                                         {s.name} ({s.duration_minutes} min)
+                                        {s.price && ` - R$ ${s.price.toFixed(2)}`}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
