@@ -103,7 +103,9 @@ export default function AvailabilityPage() {
     }
 
     const getSlotsForDay = (dayIndex: number) => {
-        return schedules.filter(s => s.day_of_week === dayIndex)
+        return schedules
+            .filter(s => s.day_of_week === dayIndex)
+            .sort((a, b) => a.start_time.localeCompare(b.start_time))
     }
 
     const getOriginalIndex = (slot: Schedule) => {

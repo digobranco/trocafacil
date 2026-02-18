@@ -54,6 +54,9 @@ export function AppointmentDialog({ selectedDate, selectedTime, defaultProfessio
     const [recurrenceWeeks, setRecurrenceWeeks] = useState(12)
     const [selectedDays, setSelectedDays] = useState<number[]>([])
 
+    // Track previous professional to detect real changes
+    const previousProfessionalRef = useRef<string>('')
+
     // Update selectedDays when date changes
     useEffect(() => {
         const d = new Date(date + 'T00:00:00')
@@ -68,6 +71,7 @@ export function AppointmentDialog({ selectedDate, selectedTime, defaultProfessio
             // Sync professionalId with prop when dialog opens
             if (defaultProfessionalId) {
                 setProfessionalId(defaultProfessionalId)
+                previousProfessionalRef.current = defaultProfessionalId
             }
             if (initialCustomerId) {
                 setCustomerId(initialCustomerId)
@@ -89,7 +93,7 @@ export function AppointmentDialog({ selectedDate, selectedTime, defaultProfessio
         }
     }
 
-    // Load services when professional is selected
+    // Load services filtered by professional selection
     useEffect(() => {
         async function loadProfessionalServices() {
             if (professionalId) {
@@ -104,7 +108,7 @@ export function AppointmentDialog({ selectedDate, selectedTime, defaultProfessio
                         description: s.description
                     }))
                     setFormData(prev => ({ ...prev, services }))
-                    // ALWAYS reset service selection when professional changes
+                    // Clear service selection when professional changes
                     setServiceId('')
                 } catch (error) {
                     console.error('Error loading professional services:', error)
@@ -121,7 +125,7 @@ export function AppointmentDialog({ selectedDate, selectedTime, defaultProfessio
         if (open) {
             loadProfessionalServices()
         }
-    }, [professionalId, open, serviceId])
+    }, [professionalId, open]) // NOTE: serviceId is NOT in dependencies to avoid circular bug
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
@@ -224,10 +228,9 @@ export function AppointmentDialog({ selectedDate, selectedTime, defaultProfessio
                         <Select
                             value={serviceId}
                             onValueChange={setServiceId}
-                            disabled={!professionalId}
                         >
                             <SelectTrigger className="col-span-3">
-                                <SelectValue placeholder={professionalId ? "Selecione o serviço" : "Selecione um profissional primeiro"} />
+                                <SelectValue placeholder="Selecione o serviço" />
                             </SelectTrigger>
                             <SelectContent>
                                 {formData.services.map((s: any) => (
