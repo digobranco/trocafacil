@@ -17,6 +17,7 @@ import { AnamnesisForm } from '../anamnesis-form'
 import { EvolutionTimeline } from '../evolution-timeline'
 import { InviteButton } from '../invite-button'
 import { CustomerAppointments } from '../customer-appointments'
+import { ClientMembershipCard } from '../client-membership-card'
 
 interface Props {
     params: Promise<{ id: string }>
@@ -38,6 +39,8 @@ export default async function CustomerDetailsPage({ params }: Props) {
     const linkedProfile = customer.linked_profile
     // @ts-ignore
     const creditCount = customer.credits?.[0]?.quantity || 0
+
+    // We pass the customer id to the client component which will fetch membership data
 
     return (
         <div className="space-y-6 max-w-5xl mx-auto">
@@ -152,6 +155,9 @@ export default async function CustomerDetailsPage({ params }: Props) {
 
                 {/* Side Column: Credits and User Link */}
                 <div className="space-y-6">
+                    {/* Membership Plan Section */}
+                    <ClientMembershipCard clientId={customer.id} clientName={customer.full_name} />
+
                     {/* Credits Section */}
                     <Card className="border-indigo-200 shadow-sm">
                         <CardHeader className="pb-2">

@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Calendar, Users, Settings, Home, Dumbbell, UserCog, Building } from 'lucide-react'
+import { Calendar, Users, Settings, Home, Dumbbell, UserCog, Building, CreditCard } from 'lucide-react'
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
     role?: 'super_admin' | 'admin' | 'professional' | 'customer'
@@ -38,6 +38,11 @@ export function Sidebar({ className, role = 'customer' }: SidebarProps) {
             title: 'Clientes',
             href: '/dashboard/clientes',
             icon: Users,
+        },
+        {
+            title: 'Planos',
+            href: '/dashboard/planos',
+            icon: CreditCard,
         },
     ]
 

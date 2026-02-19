@@ -121,25 +121,27 @@ export async function createAppointment(data: CreateAppointmentData) {
     const totalSeries = Math.ceil(weeksToGenerate / weekInterval)
     const totalAppointments = totalSeries * targetDays.length
 
-    // Check credits if user is a customer
-    if (role === 'customer') {
-        const { data: creditRow } = await supabase
-            .from('credits')
-            .select('quantity')
-            .eq('client_id', data.customerId)
-            .eq('tenant_id', tenantId)
-            .maybeSingle()
+    // Check credits for client with active membership or customer role
+    const { data: creditRow } = await supabase
+        .from('credits')
+        .select('id, quantity')
+        .eq('client_id', data.customerId)
+        .eq('tenant_id', tenantId)
+        .maybeSingle()
 
-        const availableCredits = creditRow?.quantity || 0
-        if (availableCredits < totalAppointments) {
-            return {
-                error: `Você possui apenas ${availableCredits} crédito(s) disponível(is), mas está tentando realizar ${totalAppointments} agendamento(s).`
-            }
-        }
+    const availableCredits = creditRow?.quantity || 0
+    const hasCredits = availableCredits > 0
 
-        if (data.recurrence && data.recurrence !== 'none') {
-            return { error: 'Alunos não podem criar agendamentos recorrentes.' }
+    // If client has credits (from plan or manual), validate availability
+    if (hasCredits && availableCredits < totalAppointments) {
+        return {
+            error: `O cliente possui apenas ${availableCredits} crédito(s) disponível(is), mas o agendamento requer ${totalAppointments}.`
         }
+    }
+
+    // Customers can't create recurring appointments
+    if (role === 'customer' && data.recurrence && data.recurrence !== 'none') {
+        return { error: 'Alunos não podem criar agendamentos recorrentes.' }
     }
 
     for (let i = 0; i < weeksToGenerate; i += weekInterval) {
@@ -220,32 +222,24 @@ export async function createAppointment(data: CreateAppointmentData) {
         return { error: 'Falha ao criar agendamento.' }
     }
 
-    // Deduct credits if user is a customer
-    if (role === 'customer') {
-        const { data: creditRow } = await supabase
+    // Deduct credits if client has credits (from plan or manual)
+    if (hasCredits && creditRow) {
+        await supabase
             .from('credits')
-            .select('id, quantity')
-            .eq('client_id', data.customerId)
-            .eq('tenant_id', tenantId)
-            .maybeSingle()
+            .update({ quantity: Math.max(0, (creditRow.quantity || 0) - appointments.length) })
+            .eq('id', creditRow.id)
 
-        if (creditRow) {
-            await supabase
-                .from('credits')
-                .update({ quantity: Math.max(0, (creditRow.quantity || 0) - appointments.length) })
-                .eq('id', creditRow.id)
-
-            await supabase.from('credit_logs').insert({
-                tenant_id: tenantId,
-                client_id: data.customerId,
-                quantity_change: -appointments.length,
-                type: 'usage',
-                notes: `Consumido em agendamento (${appointments.length} aula(s))`
-            })
-        }
+        await supabase.from('credit_logs').insert({
+            tenant_id: tenantId,
+            client_id: data.customerId,
+            quantity_change: -appointments.length,
+            type: 'usage',
+            notes: `Consumido em agendamento (${appointments.length} aula(s))`
+        })
     }
 
     revalidatePath('/dashboard/agenda')
+    revalidatePath(`/dashboard/clientes/${data.customerId}`)
     return { success: true, count: appointments.length }
 }
 
