@@ -11,7 +11,7 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import Link from 'next/link'
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Settings, CalendarDays, LayoutGrid, User } from 'lucide-react'
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Settings, CalendarDays, LayoutGrid, User, Search, Loader2 } from 'lucide-react'
 import { format, addDays, subDays, addWeeks, subWeeks, addMonths, subMonths } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { AppointmentDialog } from './appointment-dialog'
@@ -27,30 +27,41 @@ export default function AgendaPage() {
     const [viewMode, setViewMode] = useState<ViewMode>('week')
     const [refreshKey, setRefreshKey] = useState(0)
     const [professionals, setProfessionals] = useState<{ id: string; name: string }[]>([])
-    const [selectedProfessional, setSelectedProfessional] = useState<string>('')
+    const [selectedProfessional, setSelectedProfessional] = useState<string>('all')
     const [profile, setProfile] = useState<any>(null)
     const [credits, setCredits] = useState<number>(0)
     const [onlyMyAgenda, setOnlyMyAgenda] = useState(false)
+
+    // Search state: only show results after clicking Buscar
+    const [hasSearched, setHasSearched] = useState(false)
+    const [searchLoading, setSearchLoading] = useState(false)
+    const [searchedProfessional, setSearchedProfessional] = useState<string>('all')
+    const [searchedMyAgenda, setSearchedMyAgenda] = useState(false)
+    const [searchKey, setSearchKey] = useState(0)
 
     useEffect(() => {
         loadInitialData()
     }, [])
 
     async function loadInitialData() {
-        // Single merged call: 1 auth instead of 3 separate ones
         const data = await getAgendaPageData(format(currentDate, 'yyyy-MM-dd'))
         setProfessionals(data.professionals)
         setProfile(data.user)
         setCredits(data.credits)
-
-        // Select first professional by default
-        if (data.professionals.length > 0 && !selectedProfessional) {
-            setSelectedProfessional(data.professionals[0].id)
-        }
     }
 
+    const handleSearch = useCallback(() => {
+        setSearchLoading(true)
+        setSearchedProfessional(selectedProfessional)
+        setSearchedMyAgenda(onlyMyAgenda)
+        setSearchKey(prev => prev + 1)
+        setHasSearched(true)
+        // Loading will be managed by the child views
+        setTimeout(() => setSearchLoading(false), 300)
+    }, [selectedProfessional, onlyMyAgenda])
+
     const handleRefresh = useCallback(async () => {
-        setRefreshKey(prev => prev + 1)
+        setSearchKey(prev => prev + 1)
         const creditData = await getUserCredits()
         setCredits(creditData)
     }, [])
@@ -82,6 +93,9 @@ export default function AgendaPage() {
         setViewMode('day')
     }
 
+    // The professionalId to pass to views: use the SEARCHED values, not the dropdown
+    const activeProfId = searchedMyAgenda ? undefined : (searchedProfessional === 'all' ? '' : searchedProfessional)
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -103,7 +117,7 @@ export default function AgendaPage() {
                     )}
                     <AppointmentDialog
                         selectedDate={currentDate}
-                        defaultProfessionalId={selectedProfessional}
+                        defaultProfessionalId={searchedProfessional === 'all' ? '' : searchedProfessional}
                         onSuccess={handleRefresh}
                         disabled={profile?.role === 'customer' && credits <= 0}
                         trigger={
@@ -141,7 +155,7 @@ export default function AgendaPage() {
                     {/* Filter Tabs: Geral vs Minha Agenda */}
                     <Tabs value={onlyMyAgenda ? 'mine' : 'all'} onValueChange={(v) => setOnlyMyAgenda(v === 'mine')}>
                         <TabsList className="bg-slate-100">
-                            <TabsTrigger value="all" className="text-xs">Geral</TabsTrigger>
+                            <TabsTrigger value="all" className="text-xs">Empresa</TabsTrigger>
                             <TabsTrigger value="mine" className="text-xs">Minha Agenda</TabsTrigger>
                         </TabsList>
                     </Tabs>
@@ -158,6 +172,7 @@ export default function AgendaPage() {
                                         <SelectValue placeholder="Profissional" />
                                     </SelectTrigger>
                                     <SelectContent>
+                                        <SelectItem value="all">Todos</SelectItem>
                                         {professionals.map((p) => (
                                             <SelectItem key={p.id} value={p.id}>
                                                 {p.name}
@@ -168,6 +183,12 @@ export default function AgendaPage() {
                             </div>
                         </>
                     )}
+
+                    {/* Search Button */}
+                    <Button onClick={handleSearch} disabled={searchLoading} className="gap-2">
+                        {searchLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                        Buscar
+                    </Button>
 
                     <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
                         <TabsList>
@@ -190,32 +211,41 @@ export default function AgendaPage() {
 
             {/* View Content */}
             <div className="bg-white p-4 rounded-lg border shadow-sm min-h-[400px]">
-                {viewMode === 'day' && (
-                    <DayView
-                        key={`day-${refreshKey}-${selectedProfessional}-${onlyMyAgenda}`}
-                        currentDate={currentDate}
-                        onRefresh={handleRefresh}
-                        professionalId={onlyMyAgenda ? undefined : selectedProfessional}
-                        onlyMyAgenda={onlyMyAgenda}
-                    />
-                )}
-                {viewMode === 'week' && (
-                    <WeekView
-                        key={`week-${refreshKey}-${selectedProfessional}-${onlyMyAgenda}`}
-                        currentDate={currentDate}
-                        onSelectDay={handleSelectDay}
-                        professionalId={onlyMyAgenda ? undefined : selectedProfessional}
-                        onlyMyAgenda={onlyMyAgenda}
-                    />
-                )}
-                {viewMode === 'month' && (
-                    <MonthView
-                        key={`month-${refreshKey}-${selectedProfessional}-${onlyMyAgenda}`}
-                        currentDate={currentDate}
-                        onSelectDay={handleSelectDay}
-                        professionalId={onlyMyAgenda ? undefined : selectedProfessional}
-                        onlyMyAgenda={onlyMyAgenda}
-                    />
+                {!hasSearched ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                        <Search className="h-10 w-10 mb-3 opacity-20" />
+                        <p className="text-sm">Selecione os filtros e clique em <strong>Buscar</strong> para ver os agendamentos.</p>
+                    </div>
+                ) : (
+                    <>
+                        {viewMode === 'day' && (
+                            <DayView
+                                key={`day-${searchKey}`}
+                                currentDate={currentDate}
+                                onRefresh={handleRefresh}
+                                professionalId={activeProfId}
+                                onlyMyAgenda={searchedMyAgenda}
+                            />
+                        )}
+                        {viewMode === 'week' && (
+                            <WeekView
+                                key={`week-${searchKey}`}
+                                currentDate={currentDate}
+                                onSelectDay={handleSelectDay}
+                                professionalId={activeProfId}
+                                onlyMyAgenda={searchedMyAgenda}
+                            />
+                        )}
+                        {viewMode === 'month' && (
+                            <MonthView
+                                key={`month-${searchKey}`}
+                                currentDate={currentDate}
+                                onSelectDay={handleSelectDay}
+                                professionalId={activeProfId}
+                                onlyMyAgenda={searchedMyAgenda}
+                            />
+                        )}
+                    </>
                 )}
             </div>
         </div>

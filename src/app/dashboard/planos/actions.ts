@@ -2,6 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { getAuthContext } from '@/utils/auth-context'
+import { addWeeks } from 'date-fns'
+import { randomUUID } from 'crypto'
 
 // ==========================================
 // Types
@@ -33,9 +35,15 @@ export type ClientMembership = {
     end_date: string | null
     status: 'active' | 'paused' | 'cancelled'
     weekly_limit: number | null
+    professional_id: string | null
+    service_id: string | null
+    schedule_days: number[] | null
+    schedule_time: string | null
     created_at: string
     membership_plans?: MembershipPlan
     customers?: { id: string; full_name: string }
+    professionals?: { id: string; name: string }
+    services?: { id: string; name: string }
 }
 
 export type CreatePlanData = {
@@ -214,7 +222,9 @@ export async function getActiveClientMembership(clientId: string) {
         .from('client_memberships')
         .select(`
             *,
-            membership_plans (*)
+            membership_plans (*),
+            professionals:professional_id (id, name),
+            services:service_id (id, name)
         `)
         .eq('tenant_id', ctx.tenantId)
         .eq('client_id', clientId)
@@ -233,41 +243,200 @@ export async function createClientMembership(data: {
     clientId: string
     planId: string
     startDate: string
+    professionalId: string
+    serviceId: string
+    scheduleDays: number[]
+    scheduleTime: string
+    weeks?: number
 }) {
     const ctx = await getAuthContext()
     if (!ctx) throw new Error('Unauthorized')
     if (ctx.role !== 'admin') throw new Error('Only admins can assign plans')
 
+    const { supabase, tenantId } = ctx
+
     // Get the plan details
-    const { data: plan, error: planError } = await ctx.supabase
+    const { data: plan, error: planError } = await supabase
         .from('membership_plans')
         .select('*')
         .eq('id', data.planId)
-        .eq('tenant_id', ctx.tenantId)
+        .eq('tenant_id', tenantId)
         .single()
 
     if (planError || !plan) {
         return { error: 'Plano não encontrado.' }
     }
 
+    // Get service duration
+    const { data: serviceData } = await supabase
+        .from('professional_services')
+        .select(`
+            custom_duration_minutes,
+            services (
+                duration_minutes
+            )
+        `)
+        .eq('professional_id', data.professionalId)
+        .eq('service_id', data.serviceId)
+        .single()
+
+    if (!serviceData) {
+        return { error: 'Serviço não encontrado para este profissional.' }
+    }
+
+    const service = serviceData.services as unknown as { duration_minutes: number }
+    const durationMinutes = serviceData.custom_duration_minutes ?? service.duration_minutes
+
+    // ==========================================
+    // 1. Build appointment slots FIRST (before any DB writes)
+    // ==========================================
+    const weeksToGenerate = data.weeks || 4
+    const [hour, minute] = data.scheduleTime.split(':').map(Number)
+    const [year, month, day] = data.startDate.split('-').map(Number)
+    const baseDate = new Date(year, month - 1, day)
+    const baseDayOfWeek = baseDate.getDay()
+    const groupId = randomUUID()
+
+    const appointments = []
+    const now = new Date()
+    const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
+
+    for (let week = 0; week < weeksToGenerate; week++) {
+        const weekBaseDate = addWeeks(baseDate, week)
+
+        for (const targetDay of data.scheduleDays) {
+            const dayDiff = targetDay - baseDayOfWeek
+            const startTime = new Date(weekBaseDate)
+            startTime.setDate(startTime.getDate() + dayDiff)
+            startTime.setHours(hour, minute, 0, 0)
+
+            // Skip past dates
+            if (startTime < now) continue
+
+            const endTime = new Date(startTime.getTime() + durationMinutes * 60000)
+
+            appointments.push({
+                tenant_id: tenantId,
+                client_id: data.clientId,
+                professional_id: data.professionalId,
+                service_id: data.serviceId,
+                start_time: startTime.toISOString(),
+                end_time: endTime.toISOString(),
+                status: 'scheduled',
+                type: 'recurring',
+                recurring_group_id: groupId,
+            })
+        }
+    }
+
+    if (appointments.length === 0) {
+        return { error: 'Nenhum agendamento futuro pode ser gerado com os parâmetros informados.' }
+    }
+
+    // ==========================================
+    // 2. Validate ALL slots BEFORE creating anything
+    // ==========================================
+
+    // 2a. Check professional schedule availability for selected days
+    const { data: schedules } = await supabase
+        .from('schedules')
+        .select('max_participants, start_time, end_time, day_of_week')
+        .eq('professional_id', data.professionalId)
+        .eq('is_active', true)
+        .in('day_of_week', data.scheduleDays)
+
+    if (!schedules || schedules.length === 0) {
+        return { error: 'O profissional não tem disponibilidade configurada para os dias selecionados.' }
+    }
+
+    // Map schedules by day_of_week (only matching the selected time)
+    const scheduleByDay: Record<number, { max_participants: number }> = {}
+    for (const s of schedules) {
+        const [schedStart] = s.start_time.split(':').map(Number)
+        const [schedEnd] = s.end_time.split(':').map(Number)
+        if (hour >= schedStart && hour < schedEnd) {
+            scheduleByDay[s.day_of_week] = s
+        }
+    }
+
+    // Validate that all selected days have a matching schedule at the chosen time
+    for (const d of data.scheduleDays) {
+        if (!scheduleByDay[d]) {
+            return { error: `O profissional não tem disponibilidade para ${dayNames[d]} às ${data.scheduleTime}.` }
+        }
+    }
+
+    // 2b. Check capacity and client conflicts for each appointment
+    for (const apt of appointments) {
+        const aptDate = new Date(apt.start_time)
+        const aptDayOfWeek = aptDate.getDay()
+        const formattedDate = aptDate.toLocaleDateString('pt-BR')
+
+        // Capacity check
+        const startOfHour = new Date(aptDate)
+        startOfHour.setMinutes(0, 0, 0)
+        const endOfHour = new Date(aptDate)
+        endOfHour.setMinutes(59, 59, 999)
+
+        const { count } = await supabase
+            .from('appointments')
+            .select('id', { count: 'exact' })
+            .eq('professional_id', data.professionalId)
+            .eq('status', 'scheduled')
+            .gte('start_time', startOfHour.toISOString())
+            .lte('start_time', endOfHour.toISOString())
+
+        const currentCount = count || 0
+        const maxParticipants = scheduleByDay[aptDayOfWeek]?.max_participants || 1
+
+        if (currentCount >= maxParticipants) {
+            return {
+                error: `Horário lotado em ${formattedDate} (${dayNames[aptDayOfWeek]}) às ${data.scheduleTime}. Capacidade: ${currentCount}/${maxParticipants}.`
+            }
+        }
+
+        // Client conflict check
+        const { data: clientConflict } = await supabase
+            .from('appointments')
+            .select('id')
+            .eq('client_id', data.clientId)
+            .eq('start_time', apt.start_time)
+            .eq('status', 'scheduled')
+            .maybeSingle()
+
+        if (clientConflict) {
+            return {
+                error: `O cliente já possui um agendamento em ${formattedDate} (${dayNames[aptDayOfWeek]}) às ${data.scheduleTime}.`
+            }
+        }
+    }
+
+    // ==========================================
+    // 3. All validations passed — now create membership + appointments
+    // ==========================================
+
     // Cancel any existing active membership for this client
-    await ctx.supabase
+    await supabase
         .from('client_memberships')
         .update({ status: 'cancelled', end_date: new Date().toISOString().split('T')[0] })
         .eq('client_id', data.clientId)
-        .eq('tenant_id', ctx.tenantId)
+        .eq('tenant_id', tenantId)
         .eq('status', 'active')
 
-    // Create the membership
-    const { error: membershipError } = await ctx.supabase
+    // Create the membership with schedule config
+    const { error: membershipError } = await supabase
         .from('client_memberships')
         .insert({
-            tenant_id: ctx.tenantId,
+            tenant_id: tenantId,
             client_id: data.clientId,
             membership_plan_id: data.planId,
             start_date: data.startDate,
             status: 'active',
             weekly_limit: plan.weekly_frequency || null,
+            professional_id: data.professionalId,
+            service_id: data.serviceId,
+            schedule_days: data.scheduleDays,
+            schedule_time: data.scheduleTime,
         })
 
     if (membershipError) {
@@ -275,59 +444,20 @@ export async function createClientMembership(data: {
         return { error: 'Falha ao atribuir plano.' }
     }
 
-    // Calculate and create initial credits
-    const credits = calculateCreditsForMonth(plan, new Date(data.startDate))
+    // Insert all validated appointments
+    const { error: insertError } = await supabase
+        .from('appointments')
+        .insert(appointments)
 
-    if (credits > 0) {
-        // Check if client already has credits
-        const { data: existingCredit } = await ctx.supabase
-            .from('credits')
-            .select('id, quantity')
-            .eq('client_id', data.clientId)
-            .eq('tenant_id', ctx.tenantId)
-            .maybeSingle()
-
-        const validUntil = new Date(data.startDate)
-        validUntil.setDate(validUntil.getDate() + (plan.credit_validity_days || 30))
-
-        if (existingCredit) {
-            await ctx.supabase
-                .from('credits')
-                .update({
-                    quantity: credits,
-                    valid_until: validUntil.toISOString(),
-                    membership_plan_id: plan.id,
-                    service_restrictions: plan.service_restrictions,
-                    origin_type: plan.plan_type === 'package' ? 'package' : 'plan',
-                })
-                .eq('id', existingCredit.id)
-        } else {
-            await ctx.supabase
-                .from('credits')
-                .insert({
-                    tenant_id: ctx.tenantId,
-                    client_id: data.clientId,
-                    quantity: credits,
-                    valid_until: validUntil.toISOString(),
-                    membership_plan_id: plan.id,
-                    service_restrictions: plan.service_restrictions,
-                    origin_type: plan.plan_type === 'package' ? 'package' : 'plan',
-                })
-        }
-
-        // Log
-        await ctx.supabase.from('credit_logs').insert({
-            tenant_id: ctx.tenantId,
-            client_id: data.clientId,
-            quantity_change: credits,
-            type: 'addition',
-            notes: `Créditos do plano "${plan.name}" - ${credits} aula(s)`,
-        })
+    if (insertError) {
+        console.error('Error creating recurring appointments:', insertError)
+        return { error: 'Plano atribuído mas houve erro ao gerar agendamentos.' }
     }
 
     revalidatePath(`/dashboard/clientes/${data.clientId}`)
     revalidatePath('/dashboard/planos')
-    return { success: true }
+    revalidatePath('/dashboard/agenda')
+    return { success: true, count: appointments.length }
 }
 
 export async function cancelClientMembership(membershipId: string) {
@@ -354,51 +484,26 @@ export async function cancelClientMembership(membershipId: string) {
 }
 
 // ==========================================
-// Credit Calculation
+// Generate Appointments for Active Memberships
 // ==========================================
 
-function countWeeksInMonth(date: Date): number {
-    const year = date.getFullYear()
-    const month = date.getMonth()
-    const firstDay = new Date(year, month, 1)
-    const lastDay = new Date(year, month + 1, 0)
-    const totalDays = lastDay.getDate()
-
-    // Count full weeks (7-day spans)
-    return Math.ceil(totalDays / 7)
-}
-
-function calculateCreditsForMonth(plan: any, date: Date): number {
-    switch (plan.plan_type) {
-        case 'weekly_frequency':
-            return countWeeksInMonth(date) * (plan.weekly_frequency || 1)
-        case 'monthly_credits':
-            return plan.credits_per_month || 0
-        case 'package':
-            return plan.total_credits || 0
-        case 'unlimited':
-            // For unlimited, set a high number (days in month)
-            const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0)
-            return lastDay.getDate()
-        default:
-            return 0
-    }
-}
-
-export async function renewMonthlyCredits() {
+export async function generateMonthlyAppointments() {
     const ctx = await getAuthContext()
     if (!ctx) throw new Error('Unauthorized')
-    if (ctx.role !== 'admin') throw new Error('Only admins can renew credits')
+    if (ctx.role !== 'admin') throw new Error('Only admins can generate appointments')
 
-    // Get all active memberships for this tenant
-    const { data: memberships, error: membershipError } = await ctx.supabase
+    const { supabase, tenantId } = ctx
+
+    // Get all active memberships with schedule config
+    const { data: memberships, error: membershipError } = await supabase
         .from('client_memberships')
         .select(`
             *,
             membership_plans (*)
         `)
-        .eq('tenant_id', ctx.tenantId)
+        .eq('tenant_id', tenantId)
         .eq('status', 'active')
+        .not('schedule_days', 'is', null)
 
     if (membershipError) {
         console.error('Error fetching memberships:', membershipError)
@@ -406,84 +511,151 @@ export async function renewMonthlyCredits() {
     }
 
     if (!memberships || memberships.length === 0) {
-        return { error: 'Nenhuma assinatura ativa encontrada.' }
+        return { error: 'Nenhuma assinatura ativa com agendamento configurado.' }
     }
 
     const now = new Date()
-    let renewedCount = 0
+    let totalGenerated = 0
 
     for (const membership of memberships) {
-        const plan = membership.membership_plans as any
-        if (!plan) continue
+        if (!membership.schedule_days || !membership.schedule_time || !membership.professional_id || !membership.service_id) continue
 
-        // Skip packages — they only get credits once
-        if (plan.plan_type === 'package') continue
+        // Get service duration
+        const { data: serviceData } = await supabase
+            .from('professional_services')
+            .select(`
+                custom_duration_minutes,
+                services (
+                    duration_minutes
+                )
+            `)
+            .eq('professional_id', membership.professional_id)
+            .eq('service_id', membership.service_id)
+            .single()
 
-        const credits = calculateCreditsForMonth(plan, now)
-        if (credits <= 0) continue
+        if (!serviceData) continue
 
-        const validUntil = new Date()
-        validUntil.setDate(validUntil.getDate() + (plan.credit_validity_days || 30))
+        const service = serviceData.services as unknown as { duration_minutes: number }
+        const durationMinutes = serviceData.custom_duration_minutes ?? service.duration_minutes
 
-        // Update or create credits
-        const { data: existingCredit } = await ctx.supabase
-            .from('credits')
-            .select('id')
-            .eq('client_id', membership.client_id)
-            .eq('tenant_id', ctx.tenantId)
-            .maybeSingle()
+        const [hour, minute] = membership.schedule_time.split(':').map(Number)
+        const baseDate = new Date(now)
+        baseDate.setHours(0, 0, 0, 0)
+        const baseDayOfWeek = baseDate.getDay()
+        const groupId = randomUUID()
 
-        if (existingCredit) {
-            await ctx.supabase
-                .from('credits')
-                .update({
-                    quantity: credits,
-                    valid_until: validUntil.toISOString(),
-                    membership_plan_id: plan.id,
-                    service_restrictions: plan.service_restrictions,
-                    origin_type: 'plan',
-                })
-                .eq('id', existingCredit.id)
-        } else {
-            await ctx.supabase
-                .from('credits')
-                .insert({
-                    tenant_id: ctx.tenantId,
+        const appointments = []
+
+        for (let week = 0; week < 4; week++) {
+            const weekBaseDate = addWeeks(baseDate, week)
+
+            for (const targetDay of membership.schedule_days) {
+                const dayDiff = targetDay - baseDayOfWeek
+                const startTime = new Date(weekBaseDate)
+                startTime.setDate(startTime.getDate() + dayDiff)
+                startTime.setHours(hour, minute, 0, 0)
+
+                // Skip past dates
+                if (startTime < now) continue
+
+                const endTime = new Date(startTime.getTime() + durationMinutes * 60000)
+
+                // Check if appointment already exists at this time for this client
+                const { data: existing } = await supabase
+                    .from('appointments')
+                    .select('id')
+                    .eq('client_id', membership.client_id)
+                    .eq('start_time', startTime.toISOString())
+                    .eq('status', 'scheduled')
+                    .maybeSingle()
+
+                if (existing) continue // Skip — already has appointment
+
+                appointments.push({
+                    tenant_id: tenantId,
                     client_id: membership.client_id,
-                    quantity: credits,
-                    valid_until: validUntil.toISOString(),
-                    membership_plan_id: plan.id,
-                    service_restrictions: plan.service_restrictions,
-                    origin_type: 'plan',
+                    professional_id: membership.professional_id,
+                    service_id: membership.service_id,
+                    start_time: startTime.toISOString(),
+                    end_time: endTime.toISOString(),
+                    status: 'scheduled',
+                    type: 'recurring',
+                    recurring_group_id: groupId,
                 })
+            }
         }
 
-        // Log
-        await ctx.supabase.from('credit_logs').insert({
-            tenant_id: ctx.tenantId,
-            client_id: membership.client_id,
-            quantity_change: credits,
-            type: 'addition',
-            notes: `Renovação mensal - plano "${plan.name}" - ${credits} aula(s)`,
-        })
+        if (appointments.length > 0) {
+            const { error: insertError } = await supabase
+                .from('appointments')
+                .insert(appointments)
 
-        renewedCount++
+            if (!insertError) {
+                totalGenerated += appointments.length
+            } else {
+                console.error(`Error generating appointments for membership ${membership.id}:`, insertError)
+            }
+        }
     }
 
+    revalidatePath('/dashboard/agenda')
     revalidatePath('/dashboard/planos')
-    return { success: true, count: renewedCount }
+    return { success: true, count: totalGenerated }
 }
 
 // ==========================================
-// Plan Labels (UI helpers)
+// Membership Form Data
 // ==========================================
 
-export function getPlanTypeLabel(type: PlanType): string {
-    switch (type) {
-        case 'weekly_frequency': return 'Frequência Semanal'
-        case 'monthly_credits': return 'Créditos Mensais'
-        case 'package': return 'Pacote Avulso'
-        case 'unlimited': return 'Ilimitado'
-        default: return type
+export async function getMembershipFormData() {
+    const ctx = await getAuthContext()
+    if (!ctx) return { professionals: [], plans: [] }
+
+    const [professionalsRes, plansRes] = await Promise.all([
+        ctx.supabase
+            .from('professionals')
+            .select('id, name')
+            .eq('tenant_id', ctx.tenantId)
+            .eq('active', true)
+            .order('name'),
+        ctx.supabase
+            .from('membership_plans')
+            .select('*')
+            .eq('tenant_id', ctx.tenantId)
+            .eq('is_active', true)
+            .order('name'),
+    ])
+
+    return {
+        professionals: professionalsRes.data || [],
+        plans: (plansRes.data || []) as MembershipPlan[],
     }
 }
+
+export async function getProfessionalServicesForMembership(professionalId: string) {
+    const ctx = await getAuthContext()
+    if (!ctx) return []
+
+    const { data, error } = await ctx.supabase
+        .from('professional_services')
+        .select(`
+            service_id,
+            services (
+                id,
+                name
+            )
+        `)
+        .eq('professional_id', professionalId)
+        .eq('is_active', true)
+
+    if (error) {
+        console.error('Error fetching professional services:', error)
+        return []
+    }
+
+    return (data || []).map(ps => {
+        const service = ps.services as unknown as { id: string; name: string }
+        return { id: service.id, name: service.name }
+    })
+}
+

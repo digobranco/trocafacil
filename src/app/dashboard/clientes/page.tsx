@@ -26,7 +26,7 @@ export default async function CustomersPage() {
 
     const { data: customers } = await supabase
         .from('customers')
-        .select('*, credits(quantity)')
+        .select('*, credits(quantity), client_memberships(id, status, membership_plans(name))')
         .eq('tenant_id', profile?.tenant_id)
         .order('created_at', { ascending: false })
 

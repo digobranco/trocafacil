@@ -7,14 +7,14 @@ import { Badge } from '@/components/ui/badge'
 import {
     CreditCard,
     Loader2,
-    RefreshCw,
     Pencil,
-    Users,
     Calendar,
+    CalendarDays,
     Infinity,
     Package,
 } from 'lucide-react'
-import { getPlans, togglePlan, renewMonthlyCredits, type MembershipPlan, getPlanTypeLabel } from './actions'
+import { getPlans, togglePlan, generateMonthlyAppointments, type MembershipPlan } from './actions'
+import { getPlanTypeLabel } from './utils'
 import { PlanDialog } from './plan-dialog'
 
 function getPlanIcon(type: string) {
@@ -60,7 +60,8 @@ function getPlanDetails(plan: MembershipPlan): string {
 export default function PlansPage() {
     const [plans, setPlans] = useState<MembershipPlan[]>([])
     const [loading, setLoading] = useState(true)
-    const [renewing, setRenewing] = useState(false)
+    const [generating, setGenerating] = useState(false)
+
 
     useEffect(() => {
         loadPlans()
@@ -82,20 +83,19 @@ export default function PlansPage() {
         }
     }
 
-    async function handleRenewCredits() {
-        if (!confirm('Isso vai recalcular os créditos do mês atual para TODOS os clientes com assinatura ativa. Deseja continuar?')) {
-            return
-        }
-        setRenewing(true)
-        const res = await renewMonthlyCredits()
-        setRenewing(false)
-
+    async function handleGenerateMonthly() {
+        if (!confirm('Gerar agendamentos recorrentes para todas as assinaturas ativas?')) return
+        setGenerating(true)
+        const res = await generateMonthlyAppointments()
+        setGenerating(false)
         if (res.error) {
             alert(res.error)
         } else {
-            alert(`Créditos renovados para ${res.count} cliente(s)!`)
+            alert(`${res.count} agendamento(s) criado(s) com sucesso.`)
         }
     }
+
+
 
     if (loading) {
         return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>
@@ -113,14 +113,14 @@ export default function PlansPage() {
                 <div className="flex items-center gap-3">
                     <Button
                         variant="outline"
-                        onClick={handleRenewCredits}
-                        disabled={renewing}
+                        onClick={handleGenerateMonthly}
+                        disabled={generating}
                     >
-                        {renewing
+                        {generating
                             ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            : <RefreshCw className="mr-2 h-4 w-4" />
+                            : <CalendarDays className="mr-2 h-4 w-4" />
                         }
-                        Renovar Créditos do Mês
+                        Gerar Agendamentos do Mês
                     </Button>
                     <PlanDialog onSuccess={loadPlans} />
                 </div>

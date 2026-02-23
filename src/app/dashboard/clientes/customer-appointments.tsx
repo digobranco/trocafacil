@@ -88,8 +88,8 @@ export function CustomerAppointments({ customerId }: CustomerAppointmentsProps) 
         }
     }
 
-    const upcoming = appointments.filter(app => isAfter(new Date(app.start_time), new Date()) && app.status === 'scheduled')
-    const past = appointments.filter(app => !isAfter(new Date(app.start_time), new Date()) || app.status !== 'scheduled')
+    const upcoming = appointments.filter(app => isAfter(new Date(app.start_time), new Date()) && app.status === 'scheduled').sort((a, b) => a.start_time.localeCompare(b.start_time))
+    const past = appointments.filter(app => !isAfter(new Date(app.start_time), new Date()) || app.status !== 'scheduled').sort((a, b) => b.start_time.localeCompare(a.start_time))
 
     if (loading) {
         return <div className="py-8 text-center text-sm text-muted-foreground">Carregando agendamentos...</div>

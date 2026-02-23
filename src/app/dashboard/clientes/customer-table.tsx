@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Search, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
+import { Search, ChevronUp, ChevronDown, ChevronsUpDown, CalendarDays } from 'lucide-react'
 import Link from 'next/link'
 import { CustomerDialog } from './new-customer-dialog'
 
@@ -119,14 +119,17 @@ export function CustomerTable({ initialCustomers }: CustomerTableProps) {
                                     Créditos <SortIcon columnKey="credits" />
                                 </div>
                             </TableHead>
+                            <TableHead className="text-center">Plano</TableHead>
                             <TableHead className="text-center">Status</TableHead>
-                            <TableHead className="text-right pr-6">Ações</TableHead>
+                            <TableHead className="text-center">Ações</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {filteredAndSortedCustomers.length > 0 ? (
                             filteredAndSortedCustomers.map((customer) => {
                                 const creditCount = customer.credits?.[0]?.quantity || 0
+                                const activeMembership = customer.client_memberships?.find((m: any) => m.status === 'active')
+                                const planName = activeMembership?.membership_plans?.name
 
                                 return (
                                     <TableRow key={customer.id} className="hover:bg-slate-50/50 transition-colors">
@@ -143,13 +146,23 @@ export function CustomerTable({ initialCustomers }: CustomerTableProps) {
                                             </Badge>
                                         </TableCell>
                                         <TableCell className="text-center">
+                                            {planName ? (
+                                                <Badge className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-50 px-3 gap-1">
+                                                    <CalendarDays className="h-3 w-3" />
+                                                    {planName}
+                                                </Badge>
+                                            ) : (
+                                                <Badge variant="outline" className="text-slate-400 px-3">Sem plano</Badge>
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="text-center">
                                             <Badge variant={customer.active ? 'default' : 'secondary'} className={customer.active ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-50 px-3" : "bg-red-50 text-red-700 border-red-200 hover:bg-red-50 px-3"}>
                                                 {customer.active ? 'Ativo' : 'Inativo'}
                                             </Badge>
                                         </TableCell>
                                         <TableCell className="text-right pr-4">
                                             <div className="flex justify-end items-center gap-2">
-                                                <CustomerDialog
+                                                {/*<CustomerDialog
                                                     key={`edit-dialog-${customer.id}`}
                                                     customer={customer}
                                                     trigger={
@@ -157,9 +170,9 @@ export function CustomerTable({ initialCustomers }: CustomerTableProps) {
                                                             Editar
                                                         </Button>
                                                     }
-                                                />
+                                                />*/}
                                                 <Button variant="outline" size="sm" asChild className="h-8 border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:text-indigo-800">
-                                                    <Link href={`/dashboard/clientes/${customer.id}`}>Ver Detalhes</Link>
+                                                    <Link href={`/dashboard/clientes/${customer.id}`}>Detalhes</Link>
                                                 </Button>
                                             </div>
                                         </TableCell>
@@ -168,7 +181,7 @@ export function CustomerTable({ initialCustomers }: CustomerTableProps) {
                             })
                         ) : (
                             <TableRow>
-                                <TableCell colSpan={6} className="text-center h-48 text-muted-foreground bg-slate-50/30">
+                                <TableCell colSpan={7} className="text-center h-48 text-muted-foreground bg-slate-50/30">
                                     <div className="flex flex-col items-center gap-2">
                                         <Search className="h-8 w-8 opacity-20" />
                                         <p>Nenhum cliente encontrado para sua pesquisa.</p>

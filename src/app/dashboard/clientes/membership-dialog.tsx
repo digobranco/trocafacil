@@ -19,9 +19,16 @@ import {
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { CreditCard } from 'lucide-react'
+import { Checkbox } from '@/components/ui/checkbox'
+import { CreditCard, CalendarDays, Clock, User, Briefcase } from 'lucide-react'
 import { format } from 'date-fns'
-import { getActivePlans, createClientMembership, getPlanTypeLabel, type MembershipPlan } from '../planos/actions'
+import {
+    getMembershipFormData,
+    getProfessionalServicesForMembership,
+    createClientMembership,
+    type MembershipPlan,
+} from '../planos/actions'
+import { getPlanTypeLabel } from '../planos/utils'
 
 interface MembershipDialogProps {
     clientId: string
@@ -30,29 +37,86 @@ interface MembershipDialogProps {
     trigger?: React.ReactNode
 }
 
+const DAY_NAMES = [
+    { value: 0, label: 'Dom' },
+    { value: 1, label: 'Seg' },
+    { value: 2, label: 'Ter' },
+    { value: 3, label: 'Qua' },
+    { value: 4, label: 'Qui' },
+    { value: 5, label: 'Sex' },
+    { value: 6, label: 'Sáb' },
+]
+
 export function MembershipDialog({ clientId, clientName, onSuccess, trigger }: MembershipDialogProps) {
     const [open, setOpen] = useState(false)
     const [loading, setLoading] = useState(false)
+
+    // Form data
     const [plans, setPlans] = useState<MembershipPlan[]>([])
+    const [professionals, setProfessionals] = useState<{ id: string; name: string }[]>([])
+    const [services, setServices] = useState<{ id: string; name: string }[]>([])
+
+    // Selections
     const [selectedPlanId, setSelectedPlanId] = useState('')
+    const [selectedProfessionalId, setSelectedProfessionalId] = useState('')
+    const [selectedServiceId, setSelectedServiceId] = useState('')
+    const [selectedDays, setSelectedDays] = useState<number[]>([])
+    const [scheduleTime, setScheduleTime] = useState('09:00')
     const [startDate, setStartDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+    const [weeks, setWeeks] = useState(4)
 
     useEffect(() => {
         if (open) {
-            loadPlans()
+            loadFormData()
         }
     }, [open])
 
-    async function loadPlans() {
-        const data = await getActivePlans()
-        setPlans(data)
+    async function loadFormData() {
+        const data = await getMembershipFormData()
+        setPlans(data.plans)
+        setProfessionals(data.professionals)
+    }
+
+    async function handleProfessionalChange(professionalId: string) {
+        setSelectedProfessionalId(professionalId)
+        setSelectedServiceId('')
+        setServices([])
+
+        if (professionalId) {
+            const svcList = await getProfessionalServicesForMembership(professionalId)
+            setServices(svcList)
+        }
+    }
+
+    function handleDayToggle(dayValue: number, checked: boolean) {
+        const selectedPlan = plans.find(p => p.id === selectedPlanId)
+        const maxDays = selectedPlan?.weekly_frequency || 7
+
+        if (checked) {
+            if (selectedDays.length < maxDays) {
+                setSelectedDays(prev => [...prev, dayValue].sort())
+            }
+        } else {
+            setSelectedDays(prev => prev.filter(d => d !== dayValue))
+        }
     }
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
 
-        if (!selectedPlanId) {
-            alert('Selecione um plano.')
+        if (!selectedPlanId || !selectedProfessionalId || !selectedServiceId) {
+            alert('Preencha todos os campos obrigatórios.')
+            return
+        }
+
+        if (selectedDays.length === 0) {
+            alert('Selecione pelo menos um dia da semana.')
+            return
+        }
+
+        const selectedPlan = plans.find(p => p.id === selectedPlanId)
+        if (selectedPlan?.weekly_frequency && selectedDays.length !== selectedPlan.weekly_frequency) {
+            alert(`O plano exige exatamente ${selectedPlan.weekly_frequency} dia(s) por semana.`)
             return
         }
 
@@ -61,12 +125,26 @@ export function MembershipDialog({ clientId, clientName, onSuccess, trigger }: M
             clientId,
             planId: selectedPlanId,
             startDate,
+            professionalId: selectedProfessionalId,
+            serviceId: selectedServiceId,
+            scheduleDays: selectedDays,
+            scheduleTime,
+            weeks,
         })
         setLoading(false)
 
         if (res.success) {
-            alert('Plano atribuído com sucesso! Os créditos foram calculados.')
+            alert(`Plano atribuído com sucesso! ${res.count} agendamento(s) criado(s).`)
             setOpen(false)
+            // Reset form
+            setSelectedPlanId('')
+            setSelectedProfessionalId('')
+            setSelectedServiceId('')
+            setSelectedDays([])
+            setScheduleTime('09:00')
+            setWeeks(4)
+            // Refresh appointments list
+            window.dispatchEvent(new CustomEvent('appointment-updated'))
             onSuccess?.()
         } else {
             alert(res.error || 'Erro ao atribuir plano.')
@@ -84,21 +162,22 @@ export function MembershipDialog({ clientId, clientName, onSuccess, trigger }: M
                     </Button>
                 )}
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[480px]">
+            <DialogContent className="sm:max-w-[540px] max-h-[85vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <CreditCard className="h-5 w-5" />
+                        <CalendarDays className="h-5 w-5" />
                         Atribuir Plano
                     </DialogTitle>
                     <DialogDescription>
-                        Atribuir um plano de assinatura para <strong>{clientName}</strong>.
-                        {'\n'}Se já houver um plano ativo, ele será substituído.
+                        Atribuir um plano com agendamento recorrente para <strong>{clientName}</strong>.
+                        {'\n'}Os agendamentos serão criados automaticamente.
                     </DialogDescription>
                 </DialogHeader>
-                <form onSubmit={handleSubmit} className="grid gap-4 py-4">
+                <form onSubmit={handleSubmit} className="grid gap-5 py-4">
+                    {/* Plan Selection */}
                     <div className="grid grid-cols-4 items-center gap-4">
-                        <Label className="text-right">Plano *</Label>
-                        <Select value={selectedPlanId} onValueChange={setSelectedPlanId}>
+                        <Label className="text-right text-sm">Plano *</Label>
+                        <Select value={selectedPlanId} onValueChange={(v) => { setSelectedPlanId(v); setSelectedDays([]) }}>
                             <SelectTrigger className="col-span-3">
                                 <SelectValue placeholder="Selecione o plano" />
                             </SelectTrigger>
@@ -117,23 +196,97 @@ export function MembershipDialog({ clientId, clientName, onSuccess, trigger }: M
                             {selectedPlan.plan_type === 'weekly_frequency' && (
                                 <p>📅 {selectedPlan.weekly_frequency}x por semana</p>
                             )}
-                            {selectedPlan.plan_type === 'monthly_credits' && (
-                                <p>🎫 {selectedPlan.credits_per_month} créditos/mês</p>
-                            )}
-                            {selectedPlan.plan_type === 'package' && (
-                                <p>📦 {selectedPlan.total_credits} aulas no pacote</p>
-                            )}
-                            {selectedPlan.plan_type === 'unlimited' && (
-                                <p>♾️ Acesso ilimitado</p>
-                            )}
                             {(selectedPlan.monthly_price || selectedPlan.package_price) && (
                                 <p>💰 R$ {(selectedPlan.plan_type === 'package' ? selectedPlan.package_price : selectedPlan.monthly_price)?.toFixed(2)}</p>
                             )}
                         </div>
                     )}
 
+                    {/* Professional Selection */}
                     <div className="grid grid-cols-4 items-center gap-4">
-                        <Label className="text-right">Início *</Label>
+                        <Label className="text-right text-sm flex items-center justify-end gap-1">
+                            <User className="h-3 w-3" /> Prof. *
+                        </Label>
+                        <Select value={selectedProfessionalId} onValueChange={handleProfessionalChange}>
+                            <SelectTrigger className="col-span-3">
+                                <SelectValue placeholder="Selecione o profissional" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {professionals.map((p) => (
+                                    <SelectItem key={p.id} value={p.id}>
+                                        {p.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {/* Service Selection */}
+                    {selectedProfessionalId && (
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label className="text-right text-sm flex items-center justify-end gap-1">
+                                <Briefcase className="h-3 w-3" /> Serviço *
+                            </Label>
+                            <Select value={selectedServiceId} onValueChange={setSelectedServiceId}>
+                                <SelectTrigger className="col-span-3">
+                                    <SelectValue placeholder="Selecione o serviço" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {services.map((s) => (
+                                        <SelectItem key={s.id} value={s.id}>
+                                            {s.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
+
+                    {/* Days of Week */}
+                    {selectedPlanId && (
+                        <div className="grid grid-cols-4 items-start gap-4">
+                            <Label className="text-right text-sm pt-2">Dias *</Label>
+                            <div className="col-span-3">
+                                <div className="flex flex-wrap gap-3">
+                                    {DAY_NAMES.map((day) => (
+                                        <label
+                                            key={day.value}
+                                            className="flex items-center gap-1.5 cursor-pointer"
+                                        >
+                                            <Checkbox
+                                                checked={selectedDays.includes(day.value)}
+                                                onCheckedChange={(checked: any) => handleDayToggle(day.value, !!checked)}
+                                            />
+                                            <span className="text-sm">{day.label}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                                {selectedPlan?.weekly_frequency && (
+                                    <p className="text-xs text-muted-foreground mt-1.5">
+                                        Selecione {selectedPlan.weekly_frequency} dia(s) — {selectedDays.length}/{selectedPlan.weekly_frequency} selecionado(s)
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Time */}
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label className="text-right text-sm flex items-center justify-end gap-1">
+                            <Clock className="h-3 w-3" /> Horário *
+                        </Label>
+                        <Input
+                            type="time"
+                            className="col-span-3"
+                            value={scheduleTime}
+                            onChange={(e) => setScheduleTime(e.target.value)}
+                            required
+                        />
+                    </div>
+
+                    {/* Start Date */}
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label className="text-right text-sm">Início *</Label>
                         <Input
                             type="date"
                             className="col-span-3"
@@ -143,9 +296,29 @@ export function MembershipDialog({ clientId, clientName, onSuccess, trigger }: M
                         />
                     </div>
 
+                    {/* Weeks */}
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label className="text-right text-sm">Semanas</Label>
+                        <Select value={String(weeks)} onValueChange={(v) => setWeeks(Number(v))}>
+                            <SelectTrigger className="col-span-3">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="2">2 semanas</SelectItem>
+                                <SelectItem value="4">4 semanas</SelectItem>
+                                <SelectItem value="6">6 semanas</SelectItem>
+                                <SelectItem value="8">8 semanas</SelectItem>
+                                <SelectItem value="12">12 semanas</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
                     <div className="flex justify-end pt-4">
-                        <Button type="submit" disabled={loading || !selectedPlanId}>
-                            {loading ? 'Salvando...' : 'Atribuir Plano'}
+                        <Button
+                            type="submit"
+                            disabled={loading || !selectedPlanId || !selectedProfessionalId || !selectedServiceId || selectedDays.length === 0}
+                        >
+                            {loading ? 'Criando agendamentos...' : 'Atribuir Plano'}
                         </Button>
                     </div>
                 </form>
