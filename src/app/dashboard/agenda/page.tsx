@@ -97,20 +97,20 @@ export default function AgendaPage() {
     const activeProfId = searchedMyAgenda ? undefined : (searchedProfessional === 'all' ? '' : searchedProfessional)
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-4 md:space-y-6">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h3 className="text-2xl font-bold tracking-tight">Agenda</h3>
-                    <p className="text-muted-foreground">
+                    <h3 className="text-xl md:text-2xl font-bold tracking-tight">Agenda</h3>
+                    <p className="text-muted-foreground text-sm">
                         Gerencie os agendamentos.
                     </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                     {profile?.role !== 'customer' && (
                         <Link href="/dashboard/agenda/disponibilidade">
-                            <Button variant="outline">
-                                <Settings className="mr-2 h-4 w-4" />
+                            <Button variant="outline" size="sm" className="text-xs md:text-sm">
+                                <Settings className="mr-1 md:mr-2 h-4 w-4" />
                                 Disponibilidade
                             </Button>
                         </Link>
@@ -121,9 +121,9 @@ export default function AgendaPage() {
                         onSuccess={handleRefresh}
                         disabled={profile?.role === 'customer' && credits <= 0}
                         trigger={
-                            <Button disabled={profile?.role === 'customer' && credits <= 0}>
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {profile?.role === 'customer' && credits <= 0 ? 'Créditos Insuficientes' : 'Novo Agendamento'}
+                            <Button size="sm" className="text-xs md:text-sm" disabled={profile?.role === 'customer' && credits <= 0}>
+                                <CalendarIcon className="mr-1 md:mr-2 h-4 w-4" />
+                                {profile?.role === 'customer' && credits <= 0 ? 'Sem Créditos' : 'Novo Agendamento'}
                             </Button>
                         }
                     />
@@ -131,44 +131,48 @@ export default function AgendaPage() {
             </div>
 
             {/* Navigation & View Toggle */}
-            <div className="flex items-center justify-between bg-white p-4 rounded-lg border shadow-sm flex-wrap gap-3">
-                <div className="flex items-center gap-2">
-                    <Button variant="outline" size="icon" onClick={() => navigate('prev')}>
-                        <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <Button variant="outline" size="icon" onClick={() => navigate('next')}>
-                        <ChevronRight className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={goToToday}>
-                        Hoje
-                    </Button>
+            <div className="bg-white p-3 md:p-4 rounded-lg border shadow-sm space-y-3">
+                {/* Row 1: Nav + Date */}
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1 md:gap-2">
+                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => navigate('prev')}>
+                            <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => navigate('next')}>
+                            <ChevronRight className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-xs" onClick={goToToday}>
+                            Hoje - {format(new Date(), 'dd/MM/yyyy')}
+                        </Button>
+                    </div>
+
+                    <div className="flex items-center space-x-1 md:space-x-2">
+                        <CalendarIcon className="h-4 w-4 md:h-5 md:w-5 text-muted-foreground" />
+                        <span className="text-sm md:text-lg font-medium capitalize truncate max-w-[140px] md:max-w-none">
+                            {getTitle()}
+                        </span>
+                    </div>
                 </div>
 
-                <div className="flex items-center space-x-2">
-                    <CalendarIcon className="h-5 w-5 text-muted-foreground" />
-                    <span className="text-lg font-medium capitalize">
-                        {getTitle()}
-                    </span>
-                </div>
-
-                <div className="flex items-center gap-3">
+                {/* Row 2: Filters + View Mode */}
+                <div className="flex flex-wrap items-center gap-2">
                     {/* Filter Tabs: Geral vs Minha Agenda */}
                     <Tabs value={onlyMyAgenda ? 'mine' : 'all'} onValueChange={(v) => setOnlyMyAgenda(v === 'mine')}>
-                        <TabsList className="bg-slate-100">
-                            <TabsTrigger value="all" className="text-xs">Empresa</TabsTrigger>
-                            <TabsTrigger value="mine" className="text-xs">Minha Agenda</TabsTrigger>
+                        <TabsList className="bg-slate-100 h-8">
+                            <TabsTrigger value="all" className="text-xs px-2">Empresa</TabsTrigger>
+                            <TabsTrigger value="mine" className="text-xs px-2">Minha Agenda</TabsTrigger>
                         </TabsList>
                     </Tabs>
 
                     {!onlyMyAgenda && (
                         <>
-                            <div className="h-8 w-px bg-slate-200" />
+                            <div className="h-6 w-px bg-slate-200 hidden sm:block" />
 
                             {/* Professional Filter */}
-                            <div className="flex items-center gap-2">
-                                <User className="h-4 w-4 text-muted-foreground" />
+                            <div className="flex items-center gap-1">
+                                <User className="h-4 w-4 text-muted-foreground hidden sm:block" />
                                 <Select value={selectedProfessional} onValueChange={setSelectedProfessional}>
-                                    <SelectTrigger className="w-[180px]">
+                                    <SelectTrigger className="w-[140px] md:w-[180px] h-8 text-xs">
                                         <SelectValue placeholder="Profissional" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -185,23 +189,22 @@ export default function AgendaPage() {
                     )}
 
                     {/* Search Button */}
-                    <Button onClick={handleSearch} disabled={searchLoading} className="gap-2">
-                        {searchLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                    <Button onClick={handleSearch} disabled={searchLoading} size="sm" className="gap-1 h-8 text-xs">
+                        {searchLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
                         Buscar
                     </Button>
 
+                    <div className="flex-1" />
+
                     <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
-                        <TabsList>
-                            <TabsTrigger value="day" className="text-xs">
-                                <CalendarDays className="h-4 w-4 mr-1" />
+                        <TabsList className="h-8">
+                            <TabsTrigger value="day" className="text-xs px-2">
                                 Dia
                             </TabsTrigger>
-                            <TabsTrigger value="week" className="text-xs">
-                                <LayoutGrid className="h-4 w-4 mr-1" />
-                                Semana
+                            <TabsTrigger value="week" className="text-xs px-2">
+                                Sem
                             </TabsTrigger>
-                            <TabsTrigger value="month" className="text-xs">
-                                <CalendarIcon className="h-4 w-4 mr-1" />
+                            <TabsTrigger value="month" className="text-xs px-2">
                                 Mês
                             </TabsTrigger>
                         </TabsList>

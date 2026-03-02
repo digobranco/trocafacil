@@ -86,3 +86,43 @@ export async function updateTenantByAdmin(tenantId: string, formData: FormData) 
     revalidatePath(`/admin/tenants/${tenantId}`)
     return { success: true }
 }
+
+export async function startImpersonation(tenantId: string) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Não autenticado.' }
+
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+    if (profile?.role !== 'super_admin') return { error: 'Sem permissão.' }
+
+    // Verify tenant exists
+    const { data: tenant, error } = await supabase
+        .from('tenants')
+        .select('id, name')
+        .eq('id', tenantId)
+        .single()
+
+    if (error || !tenant) {
+        return { error: 'Tenant não encontrado.' }
+    }
+
+    const { setImpersonatingTenantId } = await import('@/utils/impersonation')
+    await setImpersonatingTenantId(tenant.id)
+
+    return { success: true, redirectTo: '/dashboard' }
+}
+
+export async function stopImpersonation() {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Não autenticado.' }
+
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+    if (profile?.role !== 'super_admin') return { error: 'Sem permissão.' }
+
+    const { clearImpersonation } = await import('@/utils/impersonation')
+    await clearImpersonation()
+
+    return { success: true, redirectTo: '/admin' }
+}
+

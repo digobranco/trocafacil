@@ -7,17 +7,14 @@ import { checkRole } from '@/utils/roles'
 import { TenantForm } from '../configuracoes/tenant-form'
 
 export default async function EmpresaPage() {
-    await checkRole(['admin'])
+    const roleData = await checkRole(['admin'])
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
 
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('*, tenants(*)')
-        .eq('id', user?.id)
+    const { data: tenant } = await supabase
+        .from('tenants')
+        .select('*')
+        .eq('id', roleData?.tenant_id)
         .single()
-
-    const tenant = profile?.tenants
 
     if (!tenant) {
         return (

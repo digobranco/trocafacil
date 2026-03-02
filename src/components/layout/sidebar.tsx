@@ -8,10 +8,16 @@ import { Calendar, Users, Settings, Home, Dumbbell, UserCog, Building, CreditCar
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
     role?: 'super_admin' | 'admin' | 'professional' | 'customer'
+    onNavigate?: () => void
 }
 
-export function Sidebar({ className, role = 'customer' }: SidebarProps) {
+export function Sidebar({ className, role = 'customer', onNavigate }: SidebarProps) {
     const pathname = usePathname()
+
+    const isActive = (href: string) => {
+        if (href === '/dashboard') return pathname === '/dashboard'
+        return pathname.startsWith(href)
+    }
 
     // Itens visíveis para todos (exceto super_admin que tem layout próprio)
     const commonItems = [
@@ -87,11 +93,14 @@ export function Sidebar({ className, role = 'customer' }: SidebarProps) {
                         {items.map((item) => (
                             <Button
                                 key={item.href}
-                                variant={pathname === item.href ? "secondary" : "ghost"}
-                                className="w-full justify-start"
+                                variant={isActive(item.href) ? "secondary" : "ghost"}
+                                className={cn(
+                                    "w-full justify-start",
+                                    isActive(item.href) && "bg-primary/10 text-primary font-semibold border-l-2 border-primary rounded-l-none"
+                                )}
                                 asChild
                             >
-                                <Link href={item.href}>
+                                <Link href={item.href} onClick={onNavigate}>
                                     <item.icon className="mr-2 h-4 w-4" />
                                     {item.title}
                                 </Link>
@@ -103,3 +112,4 @@ export function Sidebar({ className, role = 'customer' }: SidebarProps) {
         </div>
     )
 }
+

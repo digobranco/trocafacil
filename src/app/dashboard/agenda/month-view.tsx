@@ -50,7 +50,7 @@ export function MonthView({ currentDate, onSelectDay, professionalId, onlyMyAgen
     return (
         <div>
             {/* Header */}
-            <div className="grid grid-cols-7 gap-1 mb-2">
+            <div className="hidden sm:grid grid-cols-7 gap-1 mb-2">
                 {DAY_NAMES.map(name => (
                     <div key={name} className="text-center text-xs font-medium text-muted-foreground py-2">
                         {name}
@@ -59,7 +59,7 @@ export function MonthView({ currentDate, onSelectDay, professionalId, onlyMyAgen
             </div>
 
             {/* Days Grid */}
-            <div className="grid grid-cols-7 gap-1">
+            <div className="grid grid-cols-2 sm:grid-cols-7 gap-1">
                 {allDays.map(day => {
                     const dayStr = format(day, 'yyyy-MM-dd')
                     const data = dataMap.get(dayStr)
@@ -71,7 +71,7 @@ export function MonthView({ currentDate, onSelectDay, professionalId, onlyMyAgen
                         <div
                             key={dayStr}
                             className={cn(
-                                "p-2 min-h-[80px] border rounded-md cursor-pointer hover:bg-slate-50 transition-colors",
+                                "p-2 min-h-[60px] sm:min-h-[80px] border rounded-md cursor-pointer hover:bg-slate-50 transition-colors",
                                 !isCurrentMonth && "bg-muted/30 text-muted-foreground",
                                 isSelected && "border-primary border-2 bg-primary/5",
                                 isToday && !isSelected && "border-primary/50",
@@ -80,9 +80,10 @@ export function MonthView({ currentDate, onSelectDay, professionalId, onlyMyAgen
                             onClick={() => onSelectDay(day)}
                         >
                             <div className={cn(
-                                "text-sm font-medium mb-1",
+                                "text-sm font-medium mb-1 flex items-center gap-1",
                                 isToday && "text-primary font-bold"
                             )}>
+                                <span className="sm:hidden text-[10px] text-muted-foreground font-normal">{DAY_NAMES[day.getDay()]}</span>
                                 {format(day, 'd')}
                             </div>
                             {data && isCurrentMonth && (

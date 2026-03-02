@@ -39,7 +39,7 @@ export function WeekView({ currentDate, onSelectDay, professionalId, onlyMyAgend
     }
 
     return (
-        <div className="grid grid-cols-7 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-7 gap-2">
             {days.map((day, index) => {
                 const date = addDays(weekStart, index)
                 const isToday = format(new Date(), 'yyyy-MM-dd') === day.date
@@ -55,47 +55,51 @@ export function WeekView({ currentDate, onSelectDay, professionalId, onlyMyAgend
                         )}
                         onClick={() => onSelectDay(date)}
                     >
-                        <CardContent className="p-3 text-center">
-                            <div className="text-xs text-muted-foreground mb-1">
-                                {DAY_NAMES[index]}
+                        <CardContent className="p-3 flex sm:flex-col items-center sm:text-center gap-3 sm:gap-0">
+                            <div className="flex items-center gap-2 sm:flex-col sm:gap-0 min-w-[60px]">
+                                <div className="text-xs text-muted-foreground sm:mb-1">
+                                    {DAY_NAMES[index]}
+                                </div>
+                                <div className={cn(
+                                    "text-xl sm:text-2xl font-bold sm:mb-2",
+                                    isToday && "text-primary"
+                                )}>
+                                    {format(date, 'd')}
+                                </div>
                             </div>
-                            <div className={cn(
-                                "text-2xl font-bold mb-2",
-                                isToday && "text-primary"
-                            )}>
-                                {format(date, 'd')}
+                            <div className="flex flex-wrap gap-1 sm:flex-col sm:items-center">
+                                {day.userAppointmentsCount > 0 && (
+                                    <Badge variant="secondary" className="text-[10px] bg-indigo-100 text-indigo-700 border-indigo-200">
+                                        {day.userAppointmentsCount === 1 ? 'Meu horário' : `${day.userAppointmentsCount} agend.`}
+                                    </Badge>
+                                )}
+                                {!onlyMyAgenda && (
+                                    <>
+                                        {day.hasAvailability ? (
+                                            <>
+                                                {day.appointmentsCount > 0 && (
+                                                    <Badge variant="outline" className="text-[10px] bg-slate-50 text-slate-600 border-slate-200">
+                                                        {day.appointmentsCount} {day.appointmentsCount === 1 ? 'sessão' : 'sessões'}
+                                                    </Badge>
+                                                )}
+                                                {day.availableSlots > 0 ? (
+                                                    <Badge variant="outline" className="text-xs text-green-700 border-green-300">
+                                                        {day.availableSlots} {day.availableSlots === 1 ? 'vaga' : 'vagas'}
+                                                    </Badge>
+                                                ) : (
+                                                    <Badge variant="destructive" className="text-xs">
+                                                        Lotado
+                                                    </Badge>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <Badge variant="secondary" className="text-xs">
+                                                Folga
+                                            </Badge>
+                                        )}
+                                    </>
+                                )}
                             </div>
-                            {day.userAppointmentsCount > 0 && (
-                                <Badge variant="secondary" className="text-[10px] mb-1 bg-indigo-100 text-indigo-700 border-indigo-200">
-                                    {day.userAppointmentsCount === 1 ? 'Meu horário' : `${day.userAppointmentsCount} agend.`}
-                                </Badge>
-                            )}
-                            {!onlyMyAgenda && (
-                                <>
-                                    {day.hasAvailability ? (
-                                        <div className="flex flex-col gap-1 items-center">
-                                            {day.appointmentsCount > 0 && (
-                                                <Badge variant="outline" className="text-[10px] bg-slate-50 text-slate-600 border-slate-200">
-                                                    {day.appointmentsCount} {day.appointmentsCount === 1 ? 'sessão' : 'sessões'}
-                                                </Badge>
-                                            )}
-                                            {day.availableSlots > 0 ? (
-                                                <Badge variant="outline" className="text-xs text-green-700 border-green-300">
-                                                    {day.availableSlots} {day.availableSlots === 1 ? 'vaga' : 'vagas'}
-                                                </Badge>
-                                            ) : (
-                                                <Badge variant="destructive" className="text-xs">
-                                                    Lotado
-                                                </Badge>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <Badge variant="secondary" className="text-xs">
-                                            Folga
-                                        </Badge>
-                                    )}
-                                </>
-                            )}
                         </CardContent>
                     </Card>
                 )

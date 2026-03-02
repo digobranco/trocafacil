@@ -14,20 +14,13 @@ import { checkRole } from '@/utils/roles'
 import { CustomerTable } from './customer-table'
 
 export default async function CustomersPage() {
-    await checkRole(['admin', 'professional'])
+    const roleData = await checkRole(['admin', 'professional'])
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('tenant_id')
-        .eq('id', user?.id)
-        .single()
 
     const { data: customers } = await supabase
         .from('customers')
         .select('*, credits(quantity), client_memberships(id, status, membership_plans(name))')
-        .eq('tenant_id', profile?.tenant_id)
+        .eq('tenant_id', roleData?.tenant_id)
         .order('created_at', { ascending: false })
 
     return (

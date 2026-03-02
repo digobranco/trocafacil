@@ -154,19 +154,19 @@ export function DayView({ currentDate, onRefresh, professionalId, onlyMyAgenda }
         <div className="grid gap-3">
             {displayedSlots.map((slot, index) => (
                 <Card key={index} className={`border-l-4 ${getStatusColor(slot.status)}`}>
-                    <CardHeader className="py-2 flex flex-row items-center justify-between">
+                    <CardHeader className="py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                         <div className="flex items-center gap-3">
                             <CardTitle className="text-sm font-medium flex items-center gap-2">
                                 <Clock className="h-4 w-4 text-muted-foreground" />
                                 {slot.time}
                             </CardTitle>
                             {slot.professionalName && (
-                                <span className="text-sm text-purple-600 font-medium">
+                                <span className="text-sm text-purple-600 font-medium truncate max-w-[120px] sm:max-w-none">
                                     {slot.professionalName}
                                 </span>
                             )}
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                             <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                 <Users className="h-3 w-3" />
                                 {slot.currentCount}/{slot.maxParticipants}
@@ -178,23 +178,23 @@ export function DayView({ currentDate, onRefresh, professionalId, onlyMyAgenda }
                                         <Button
                                             variant="outline"
                                             size="sm"
-                                            className="h-8 gap-2 bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                                            className="h-7 sm:h-8 gap-1 text-xs bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                                         >
-                                            <Eye className="h-4 w-4" />
+                                            <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
                                             Detalhes
                                         </Button>
                                     </Link>
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="h-8 gap-2 bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                                        className="h-7 sm:h-8 gap-1 text-xs bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50"
                                         onClick={(e) => {
                                             e.stopPropagation()
                                             setSelectedSlot({ time: slot.time, professionalId: slot.professionalId || professionalId || '' })
                                             setDetailsOpen(true)
                                         }}
                                     >
-                                        <CheckSquare className="h-4 w-4" />
+                                        <CheckSquare className="h-3 w-3 sm:h-4 sm:w-4" />
                                         Presença
                                     </Button>
                                 </>

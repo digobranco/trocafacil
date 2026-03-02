@@ -11,6 +11,8 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 
+import { ImpersonateButton } from './impersonate-button'
+
 export default async function AdminTenantsPage() {
     const supabase = await createClient()
     const { data: tenants } = await supabase
@@ -52,7 +54,8 @@ export default async function AdminTenantsPage() {
                                     <Badge variant="outline">{tenant.plan}</Badge>
                                 </TableCell>
                                 <TableCell>{new Date(tenant.created_at).toLocaleDateString()}</TableCell>
-                                <TableCell className="text-right">
+                                <TableCell className="text-right space-x-1">
+                                    <ImpersonateButton tenantId={tenant.id} />
                                     <Link href={`/admin/tenants/${tenant.id}`}>
                                         <Button variant="ghost" size="sm">Editar</Button>
                                     </Link>
