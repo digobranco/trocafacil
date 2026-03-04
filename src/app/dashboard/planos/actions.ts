@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { getAuthContext } from '@/utils/auth-context'
-import { addWeeks } from 'date-fns'
+import { addWeeks, endOfMonth, isBefore } from 'date-fns'
 import { randomUUID } from 'crypto'
 
 // ==========================================
@@ -287,22 +287,23 @@ export async function createClientMembership(data: {
     const service = serviceData.services as unknown as { duration_minutes: number }
     const durationMinutes = serviceData.custom_duration_minutes ?? service.duration_minutes
 
-    // ==========================================
-    // 1. Build appointment slots FIRST (before any DB writes)
-    // ==========================================
-    const weeksToGenerate = data.weeks || 4
     const [hour, minute] = data.scheduleTime.split(':').map(Number)
     const [year, month, day] = data.startDate.split('-').map(Number)
     const baseDate = new Date(year, month - 1, day)
     const baseDayOfWeek = baseDate.getDay()
+    const monthEnd = endOfMonth(baseDate)
     const groupId = randomUUID()
 
     const appointments = []
     const now = new Date()
     const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
 
-    for (let week = 0; week < weeksToGenerate; week++) {
+    let week = 0
+    let checkingDate = new Date(baseDate)
+
+    while (isBefore(checkingDate, monthEnd)) {
         const weekBaseDate = addWeeks(baseDate, week)
+        checkingDate = weekBaseDate
 
         for (const targetDay of data.scheduleDays) {
             const dayDiff = targetDay - baseDayOfWeek
@@ -327,6 +328,8 @@ export async function createClientMembership(data: {
                 recurring_group_id: groupId,
             })
         }
+        week++
+        checkingDate = addWeeks(baseDate, week)
     }
 
     if (appointments.length === 0) {
@@ -542,12 +545,18 @@ export async function generateMonthlyAppointments() {
         const baseDate = new Date(now)
         baseDate.setHours(0, 0, 0, 0)
         const baseDayOfWeek = baseDate.getDay()
+        const monthEnd = endOfMonth(now)
         const groupId = randomUUID()
 
         const appointments = []
 
-        for (let week = 0; week < 4; week++) {
+        // Loop through weeks until we pass the end of the month
+        let week = 0
+        let checkingDate = new Date(baseDate)
+
+        while (isBefore(checkingDate, monthEnd)) {
             const weekBaseDate = addWeeks(baseDate, week)
+            checkingDate = weekBaseDate // Update for loop condition
 
             for (const targetDay of membership.schedule_days) {
                 const dayDiff = targetDay - baseDayOfWeek
@@ -583,6 +592,8 @@ export async function generateMonthlyAppointments() {
                     recurring_group_id: groupId,
                 })
             }
+            week++
+            checkingDate = addWeeks(baseDate, week)
         }
 
         if (appointments.length > 0) {

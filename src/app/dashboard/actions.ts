@@ -46,9 +46,19 @@ export async function createTenant(formData: FormData) {
 export async function updateTenantSettings(formData: FormData) {
     const supabase = await createClient()
     const name = formData.get('name') as string
+    const slugInput = formData.get('slug') as string
     const is_active = formData.get('is_active') === 'on'
     const cancellationWindow = parseInt(formData.get('cancellation_window_hours') as string || '24')
     const creditValidity = parseInt(formData.get('credit_validity_days') as string || '30')
+
+    // Format slug: lowercase, no spaces, no special chars
+    const slug = slugInput?.toLowerCase()
+        .trim()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '') // remove accents
+        .replace(/[^a-z0-z0-9-]/g, '-') // replace non-alphanumeric with -
+        .replace(/-+/g, '-') // remove double hyphens
+        .replace(/^-|-$/g, '') // remove leading/trailing hyphens
 
     // Check auth
     const { data: { user } } = await supabase.auth.getUser()
@@ -70,6 +80,7 @@ export async function updateTenantSettings(formData: FormData) {
         .from('tenants')
         .update({
             name: name,
+            slug: slug,
             is_active,
             cancellation_window_hours: cancellationWindow,
             credit_validity_days: creditValidity
@@ -83,6 +94,64 @@ export async function updateTenantSettings(formData: FormData) {
 
     revalidatePath('/dashboard/configuracoes')
     return { success: true, message: 'Configurações salvas com sucesso!' }
+}
+
+export async function getProfessionalInviteCode() {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Unauthorized')
+
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('tenant_id, role')
+        .eq('id', user.id)
+        .single()
+
+    if (!profile?.tenant_id || profile.role !== 'admin') {
+        throw new Error('Unauthorized')
+    }
+
+    const { data: tenant } = await supabase
+        .from('tenants')
+        .select('professional_invite_code, slug')
+        .eq('id', profile.tenant_id)
+        .single()
+
+    return {
+        code: tenant?.professional_invite_code,
+        slug: tenant?.slug
+    }
+}
+
+export async function regenerateProfessionalInviteCode() {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Unauthorized')
+
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('tenant_id, role')
+        .eq('id', user.id)
+        .single()
+
+    if (!profile?.tenant_id || profile.role !== 'admin') {
+        throw new Error('Unauthorized')
+    }
+
+    const newCode = Math.random().toString(36).substring(2, 12).toLowerCase()
+
+    const { error } = await supabase
+        .from('tenants')
+        .update({ professional_invite_code: newCode })
+        .eq('id', profile.tenant_id)
+
+    if (error) {
+        console.error('Regenerate Code Error:', error)
+        return { error: 'Erro ao gerar novo código.' }
+    }
+
+    revalidatePath('/dashboard/equipe')
+    return { success: true, code: newCode }
 }
 
 export async function joinTenantByCode(formData: FormData) {

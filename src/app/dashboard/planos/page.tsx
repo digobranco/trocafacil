@@ -16,6 +16,7 @@ import {
 import { getPlans, togglePlan, generateMonthlyAppointments, type MembershipPlan } from './actions'
 import { getPlanTypeLabel } from './utils'
 import { PlanDialog } from './plan-dialog'
+import { EmptyState } from '@/components/ui/empty-state'
 import { ViewToggle, useViewToggle } from '@/components/ui/view-toggle'
 import {
     Table,
@@ -138,16 +139,21 @@ export default function PlansPage() {
             </div>
 
             {plans.length === 0 ? (
-                <Card>
-                    <CardContent className="flex flex-col items-center justify-center p-12 text-center">
-                        <CreditCard className="h-12 w-12 text-muted-foreground mb-4" />
-                        <h4 className="text-lg font-semibold mb-2">Nenhum plano cadastrado</h4>
-                        <p className="text-muted-foreground mb-4">
-                            Crie seu primeiro plano para começar a gerenciar assinaturas dos clientes.
-                        </p>
-                        <PlanDialog onSuccess={loadPlans} />
-                    </CardContent>
-                </Card>
+                <EmptyState
+                    icon={CreditCard}
+                    title="Nenhum plano cadastrado"
+                    description="Crie seus modelos de planos (mensalidade, pacote de aulas, etc) para vincular aos seus clientes."
+                    className="mt-4"
+                >
+                    <PlanDialog
+                        onSuccess={loadPlans}
+                        trigger={
+                            <Button size="lg" className="px-8 shadow-md">
+                                Criar Meu Primeiro Plano
+                            </Button>
+                        }
+                    />
+                </EmptyState>
             ) : (
                 <>
                     {/* List View — desktop only */}

@@ -77,11 +77,12 @@ export default async function CustomerDetailsPage({ params }: Props) {
                 {/* Main Info Column */}
                 <div className="md:col-span-2 space-y-6">
                     <Tabs defaultValue="info" className="w-full">
-                        <TabsList className="grid w-full grid-cols-4 mb-6">
+                        <TabsList className="grid w-full grid-cols-5 mb-6">
                             <TabsTrigger value="info">Informações</TabsTrigger>
                             <TabsTrigger value="appointments">Agendamentos</TabsTrigger>
                             <TabsTrigger value="anamnesis">Anamnese</TabsTrigger>
                             <TabsTrigger value="evolution">Evolução</TabsTrigger>
+                            <TabsTrigger value="credits">Créditos</TabsTrigger>
                         </TabsList>
 
                         <TabsContent value="info" className="space-y-6">
@@ -124,19 +125,6 @@ export default async function CustomerDetailsPage({ params }: Props) {
                                     </div>
                                 </CardContent>
                             </Card>
-
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="text-lg flex items-center gap-2">
-                                        <History className="h-5 w-5 text-indigo-500" />
-                                        Histórico de Créditos
-                                    </CardTitle>
-                                    <CardDescription>Cronologia de entradas e saídas de créditos</CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <CreditHistory customerId={customer.id} />
-                                </CardContent>
-                            </Card>
                         </TabsContent>
 
                         <TabsContent value="appointments" className="space-y-6">
@@ -149,6 +137,21 @@ export default async function CustomerDetailsPage({ params }: Props) {
 
                         <TabsContent value="evolution" className="space-y-6">
                             <EvolutionTimeline customerId={customer.id} initialEvolutions={clinicalDetails?.evolutions || []} />
+                        </TabsContent>
+
+                        <TabsContent value="credits" className="space-y-6">
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="text-lg flex items-center gap-2">
+                                        <History className="h-5 w-5 text-indigo-500" />
+                                        Histórico de Créditos
+                                    </CardTitle>
+                                    <CardDescription>Cronologia de entradas e saídas de créditos (entradas, usos e reembolsos)</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <CreditHistory customerId={customer.id} />
+                                </CardContent>
+                            </Card>
                         </TabsContent>
                     </Tabs>
                 </div>

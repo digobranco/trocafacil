@@ -119,6 +119,35 @@ export async function getDashboardStats() {
     }
 }
 
+export async function getNextAppointment(customerId: string) {
+    const ctx = await getAuthContext()
+    if (!ctx) return null
+
+    const { data, error } = await ctx.supabase
+        .from('appointments')
+        .select(`
+            id,
+            start_time,
+            professionals ( name ),
+            services ( name )
+        `)
+        .eq('client_id', customerId)
+        .eq('status', 'scheduled')
+        .gte('start_time', new Date().toISOString())
+        .order('start_time', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+
+    if (error || !data) return null
+
+    return {
+        id: data.id,
+        startTime: data.start_time,
+        professionalName: (data.professionals as any)?.name,
+        serviceName: (data.services as any)?.name,
+    }
+}
+
 export async function getFilteredAppointments(filter: 'today' | 'tomorrow' | 'week') {
     const ctx = await getAuthContext()
     if (!ctx) return []
@@ -344,4 +373,98 @@ export async function getAvailableSlots() {
     return slots
         .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))
         .slice(0, 8)
+}
+
+export async function getOnboardingProgress() {
+    const ctx = await getAuthContext()
+    if (!ctx) return null
+
+    const { supabase, tenantId } = ctx
+
+    const [
+        tenantRes,
+        servicesRes,
+        professionalsRes,
+        linksRes,
+        schedulesRes,
+        plansRes,
+        customersRes,
+    ] = await Promise.all([
+        supabase.from('tenants').select('logo_url, name, slug').eq('id', tenantId).single(),
+        supabase.from('services').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).eq('active', true),
+        supabase.from('professionals').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).eq('active', true),
+        supabase.from('professional_services').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId),
+        supabase.from('schedules').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).eq('is_active', true),
+        supabase.from('membership_plans').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).eq('is_active', true),
+        supabase.from('customers').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId),
+    ])
+
+    const steps = [
+        {
+            id: 'identity',
+            title: '(1) Identidade Visual',
+            description: 'Nome, logo e URL da sua empresa',
+            isCompleted: !!tenantRes.data?.logo_url,
+            href: '/dashboard/configuracoes'
+        },
+        {
+            id: 'services',
+            title: '(2) Serviços',
+            description: 'Cadastre o que você oferece (ex: Pilates)',
+            isCompleted: (servicesRes.count || 0) > 0,
+            href: '/dashboard/servicos'
+        },
+        {
+            id: 'team',
+            title: '(3) Equipe',
+            description: 'Cadastre seus profissionais',
+            isCompleted: (professionalsRes.count || 0) > 0,
+            href: '/dashboard/profissionais'
+        },
+        {
+            id: 'links',
+            title: '(4) Vincular Profissional',
+            description: 'Defina quem atende qual serviço',
+            isCompleted: (linksRes.count || 0) > 0,
+            href: '/dashboard/profissionais'
+        },
+        {
+            id: 'schedules',
+            title: '(5) Horários',
+            description: 'Defina a agenda dos profissionais',
+            isCompleted: (schedulesRes.count || 0) > 0,
+            href: '/dashboard/agenda/disponibilidade'
+        },
+        {
+            id: 'plans',
+            title: '(6) Modelos de Planos',
+            description: 'Crie seus pacotes ou assinaturas',
+            isCompleted: (plansRes.count || 0) > 0,
+            href: '/dashboard/planos'
+        },
+        {
+            id: 'customers',
+            title: '(7) Primeiro Cliente',
+            description: 'Cadastre ou convide alguém',
+            isCompleted: (customersRes.count || 0) > 0,
+            href: '/dashboard/clientes'
+        },
+        {
+            id: 'customers',
+            title: '(Opcional) Anamnese',
+            description: 'Defina as perguntas que serão feitas na anamnese',
+            isCompleted: (customersRes.count || 0) > 0,
+            href: '/dashboard/clientes'
+        }
+    ]
+
+    const completedCount = steps.filter(s => s.isCompleted).length
+    const totalSteps = steps.length
+    const percentage = Math.round((completedCount / totalSteps) * 100)
+
+    return {
+        steps,
+        percentage,
+        isFullyCompleted: percentage === 100
+    }
 }

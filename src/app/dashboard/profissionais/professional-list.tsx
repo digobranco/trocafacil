@@ -15,6 +15,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table'
+import { EmptyState } from '@/components/ui/empty-state'
 
 interface ProfessionalListProps {
     professionals: any[]
@@ -25,14 +26,20 @@ export function ProfessionalList({ professionals }: ProfessionalListProps) {
 
     if (!professionals?.length) {
         return (
-            <Card>
-                <CardContent className="flex flex-col items-center justify-center p-12 text-center">
-                    <UserCog className="h-12 w-12 text-muted-foreground mb-4" />
-                    <h4 className="text-lg font-semibold mb-2">Nenhum profissional cadastrado</h4>
-                    <p className="text-muted-foreground mb-4">Adicione seu primeiro profissional para começar.</p>
-                    <ProfessionalDialog />
-                </CardContent>
-            </Card>
+            <EmptyState
+                icon={UserCog}
+                title="Sua lista de profissionais está vazia"
+                description="Cadastre os fisioterapeutas, instrutores ou recepcionistas do seu espaço para começar."
+                className="mt-4"
+            >
+                <ProfessionalDialog
+                    trigger={
+                        <Button size="lg" className="px-8 shadow-md">
+                            Cadastrar Meu Primeiro Profissional
+                        </Button>
+                    }
+                />
+            </EmptyState>
         )
     }
 

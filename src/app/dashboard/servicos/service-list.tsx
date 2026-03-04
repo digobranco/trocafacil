@@ -4,9 +4,11 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Pencil, Dumbbell, Clock, DollarSign } from 'lucide-react'
+import { Pencil, Dumbbell, Clock, DollarSign, UserCog } from 'lucide-react'
+import Link from 'next/link'
 import { ServiceDialog } from './service-dialog'
 import { ViewToggle, useViewToggle } from '@/components/ui/view-toggle'
+import { EmptyState } from '@/components/ui/empty-state'
 import {
     Table,
     TableBody,
@@ -25,14 +27,20 @@ export function ServiceList({ services }: ServiceListProps) {
 
     if (!services?.length) {
         return (
-            <Card>
-                <CardContent className="flex flex-col items-center justify-center p-12 text-center">
-                    <Dumbbell className="h-12 w-12 text-muted-foreground mb-4" />
-                    <h4 className="text-lg font-semibold mb-2">Nenhum serviço cadastrado</h4>
-                    <p className="text-muted-foreground mb-4">Crie seu primeiro serviço para começar.</p>
-                    <ServiceDialog />
-                </CardContent>
-            </Card>
+            <EmptyState
+                icon={Dumbbell}
+                title="Sua lista de serviços está vazia"
+                description="Cadastre as modalidades que você oferece (Pilates, Musculação, Yoga, etc) para começar a agendar."
+                className="mt-4"
+            >
+                <ServiceDialog
+                    trigger={
+                        <Button size="lg" className="px-8 shadow-md">
+                            Cadastrar Meu Primeiro Serviço
+                        </Button>
+                    }
+                />
+            </EmptyState>
         )
     }
 
@@ -78,14 +86,21 @@ export function ServiceList({ services }: ServiceListProps) {
                                         </Badge>
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <ServiceDialog
-                                            service={service}
-                                            trigger={
+                                        <div className="flex items-center gap-1 justify-end">
+                                            <Link href={`/dashboard/servicos/${service.id}/profissionais`}>
                                                 <Button variant="outline" size="sm">
-                                                    <Pencil className="mr-1 h-3 w-3" /> Editar
+                                                    <UserCog className="mr-1 h-3 w-3" /> Profissionais
                                                 </Button>
-                                            }
-                                        />
+                                            </Link>
+                                            <ServiceDialog
+                                                service={service}
+                                                trigger={
+                                                    <Button variant="outline" size="sm">
+                                                        <Pencil className="mr-1 h-3 w-3" /> Editar
+                                                    </Button>
+                                                }
+                                            />
+                                        </div>
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -133,7 +148,12 @@ export function ServiceList({ services }: ServiceListProps) {
                                         </span>
                                     </div>
                                 </div>
-                                <div className="pt-2 border-t">
+                                <div className="flex items-center gap-2 pt-2 border-t">
+                                    <Link href={`/dashboard/servicos/${service.id}/profissionais`}>
+                                        <Button variant="outline" size="sm">
+                                            <UserCog className="mr-1 h-3 w-3" /> Profissionais
+                                        </Button>
+                                    </Link>
                                     <ServiceDialog
                                         service={service}
                                         trigger={

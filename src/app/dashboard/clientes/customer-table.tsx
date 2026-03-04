@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Search, CalendarDays, Users, Phone, Mail, CreditCard } from 'lucide-react'
 import Link from 'next/link'
 import { ViewToggle, useViewToggle } from '@/components/ui/view-toggle'
+import { EmptyState } from '@/components/ui/empty-state'
 import {
     Table,
     TableBody,
@@ -16,6 +17,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table'
+import { CustomerDialog } from './new-customer-dialog'
 
 interface CustomerTableProps {
     initialCustomers: any[]
@@ -248,13 +250,28 @@ export function CustomerTable({ initialCustomers }: CustomerTableProps) {
                         </div>
                     </div>
                 </>
+            ) : search ? (
+                <EmptyState
+                    icon={Search}
+                    title="Nenhum cliente encontrado"
+                    description={`Não encontramos resultados para "${search}". Tente outro termo ou limpe o filtro.`}
+                    className="mt-4"
+                />
             ) : (
-                <Card>
-                    <CardContent className="flex flex-col items-center justify-center p-12 text-center">
-                        <Search className="h-12 w-12 text-muted-foreground mb-4 opacity-20" />
-                        <p className="text-muted-foreground">Nenhum cliente encontrado para sua pesquisa.</p>
-                    </CardContent>
-                </Card>
+                <EmptyState
+                    icon={Users}
+                    title="Sua lista de clientes está vazia"
+                    description="Cadastre seus alunos ou envie o link de convite para que eles mesmos se cadastrem e comecem a agendar."
+                    className="mt-4"
+                >
+                    <CustomerDialog
+                        trigger={
+                            <Button size="lg" className="px-8 shadow-md">
+                                Cadastrar Meu Primeiro Cliente
+                            </Button>
+                        }
+                    />
+                </EmptyState>
             )}
         </div>
     )

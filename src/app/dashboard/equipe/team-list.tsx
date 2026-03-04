@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { RoleSwitcher } from './role-switcher'
 import { Users, Mail, Shield } from 'lucide-react'
 import { ViewToggle, useViewToggle } from '@/components/ui/view-toggle'
+import { EmptyState } from '@/components/ui/empty-state'
 import {
     Table,
     TableBody,
@@ -35,13 +36,14 @@ export function TeamList({ members, currentUserId }: TeamListProps) {
 
     if (!members?.length) {
         return (
-            <Card>
-                <CardContent className="flex flex-col items-center justify-center p-12 text-center">
-                    <Users className="h-12 w-12 text-muted-foreground mb-4" />
-                    <h4 className="text-lg font-semibold mb-2">Nenhum membro encontrado</h4>
-                    <p className="text-muted-foreground">Os membros da sua equipe aparecerão aqui.</p>
-                </CardContent>
-            </Card>
+            <EmptyState
+                icon={Users}
+                title="Sua equipe ainda está vazia"
+                description="Cadastre os profissionais que atendem no seu espaço. Você pode definir diferentes níveis de acesso (Admin, Profissional)."
+                actionLabel="Cadastrar Novo Membro"
+                actionHref="/dashboard/equipe"
+                className="mt-4"
+            />
         )
     }
 
@@ -112,7 +114,7 @@ export function TeamList({ members, currentUserId }: TeamListProps) {
                                                 )}
                                             </CardTitle>
                                         </div>
-                                        {getRoleBadge(member.role)}
+                                        {/*{getRoleBadge(member.role)}*/}
                                     </div>
                                 </CardHeader>
                                 <CardContent className="space-y-3">

@@ -1,5 +1,6 @@
 'use server'
 
+import { cache } from 'react'
 import { createClient } from '@/utils/supabase/server'
 import { SupabaseClient } from '@supabase/supabase-js'
 import { getImpersonatingTenantId } from '@/utils/impersonation'
@@ -14,17 +15,17 @@ export interface AuthContext {
     isImpersonating: boolean
 }
 
+
+
 /**
  * Consolidated auth helper — performs authentication, profile lookup and
  * identity resolution in a single call with minimal DB queries.
  * All server actions should use this instead of repeating auth logic.
  *
- * Super Admin Impersonation:
- * When the authenticated user is a super_admin AND has an impersonation cookie,
- * this returns the impersonated tenant context with role='admin'.
- * For non-super_admin users, the cookie is completely ignored.
+ * Wrapped in React cache() to ensure it only runs once per request
+ * even if called from multiple server components.
  */
-export async function getAuthContext(): Promise<AuthContext | null> {
+export const getAuthContext = cache(async (): Promise<AuthContext | null> => {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return null
@@ -95,4 +96,4 @@ export async function getAuthContext(): Promise<AuthContext | null> {
         identityId,
         isImpersonating: false,
     }
-}
+})

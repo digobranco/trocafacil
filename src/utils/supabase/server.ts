@@ -24,6 +24,17 @@ export async function createClient() {
                     }
                 },
             },
+            global: {
+                fetch: (url, options) => {
+                    return fetch(url, {
+                        ...options,
+                        // @ts-ignore - Some environments support highwatermark or low-level tweaks
+                        // but standard fetch doesn't have a direct "retry" here.
+                        // We just ensure standard options are passed.
+                        next: { revalidate: 0 } // Ensure no accidental caching at fetch level for auth
+                    })
+                }
+            }
         }
     )
 }

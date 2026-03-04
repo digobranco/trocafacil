@@ -78,7 +78,7 @@ export function ServicesForm({ professionalId, services }: ServicesFormProps) {
                 toast.error(result.error)
             } else {
                 toast.success('Serviços atualizados com sucesso!')
-                router.refresh()
+                router.push('/dashboard/profissionais')
             }
         } catch (error) {
             console.error('Error saving services:', error)

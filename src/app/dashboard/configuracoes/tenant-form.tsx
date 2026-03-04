@@ -159,23 +159,22 @@ export function TenantForm({ defaultName, defaultSlug, defaultCancellationWindow
                 />
             </div>
 
-            {!isEditing && (
-                <div className="space-y-2">
-                    <Label htmlFor="slug">Link Personalizado (Slug)</Label>
-                    <div className="flex items-center space-x-2">
-                        <span className="text-sm text-muted-foreground">trocafacil.com/</span>
-                        <Input
-                            id="slug"
-                            name="slug"
-                            placeholder="studio-zen"
-                            required
-                        />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                        Este será o endereço único da sua página de agendamentos.
-                    </p>
+            <div className="space-y-2">
+                <Label htmlFor="slug">Link Personalizado (Slug)</Label>
+                <div className="flex items-center space-x-2">
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">trocafacil.com/</span>
+                    <Input
+                        id="slug"
+                        name="slug"
+                        placeholder="studio-zen"
+                        defaultValue={defaultSlug || ''}
+                        required
+                    />
                 </div>
-            )}
+                <p className="text-xs text-muted-foreground">
+                    Este será o endereço único da sua página de agendamentos.
+                </p>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
