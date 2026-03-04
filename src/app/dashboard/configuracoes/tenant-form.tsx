@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createTenant } from '../actions'
-
-import { updateTenantSettings } from '../actions'
+import { updateTenantSettings, uploadTenantLogo } from '../actions'
+import { Loader2, Upload, ImageIcon } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface TenantFormProps {
     defaultName?: string
@@ -15,13 +16,17 @@ interface TenantFormProps {
     defaultCreditValidity?: number
     inviteCode?: string
     isActive?: boolean
+    defaultLogoUrl?: string | null
 }
 
-export function TenantForm({ defaultName, defaultSlug, defaultCancellationWindow, defaultCreditValidity, inviteCode, isActive }: TenantFormProps) {
+export function TenantForm({ defaultName, defaultSlug, defaultCancellationWindow, defaultCreditValidity, inviteCode, isActive, defaultLogoUrl }: TenantFormProps) {
     const [error, setError] = useState<string | null>(null)
     const [success, setSuccess] = useState<string | null>(null)
     const [loading, setLoading] = useState(false)
     const [origin, setOrigin] = useState('')
+    const [logoPreview, setLogoPreview] = useState<string | null>(defaultLogoUrl || null)
+    const [uploadingLogo, setUploadingLogo] = useState(false)
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
     useEffect(() => {
         setOrigin(window.location.origin)
@@ -53,8 +58,33 @@ export function TenantForm({ defaultName, defaultSlug, defaultCancellationWindow
         setLoading(false)
     }
 
+    async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        // Show preview immediately
+        const reader = new FileReader()
+        reader.onloadend = () => setLogoPreview(reader.result as string)
+        reader.readAsDataURL(file)
+
+        setUploadingLogo(true)
+        const formData = new FormData()
+        formData.append('logo', file)
+
+        const res = await uploadTenantLogo(formData)
+
+        if (res.error) {
+            toast.error(res.error)
+            setLogoPreview(defaultLogoUrl || null) // Revert preview
+        } else {
+            toast.success('Logo atualizado com sucesso!')
+            if (res.logoUrl) setLogoPreview(res.logoUrl)
+        }
+        setUploadingLogo(false)
+    }
+
     return (
-        <form action={handleSubmit} className="space-y-4 max-w-md">
+        <form action={handleSubmit} className="space-y-6 max-w-md">
             {error && (
                 <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded-md text-sm">
                     {error}
@@ -64,6 +94,57 @@ export function TenantForm({ defaultName, defaultSlug, defaultCancellationWindow
             {success && (
                 <div className="p-3 bg-green-100 border border-green-400 text-green-700 rounded-md text-sm">
                     {success}
+                </div>
+            )}
+
+            {/* Logo Upload Section */}
+            {isEditing && (
+                <div className="space-y-3">
+                    <Label>Logo da Empresa</Label>
+                    <div className="flex items-center gap-4">
+                        <div
+                            className="relative w-20 h-20 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden bg-gray-50 hover:border-indigo-400 transition-colors cursor-pointer group"
+                            onClick={() => fileInputRef.current?.click()}
+                        >
+                            {logoPreview ? (
+                                <img
+                                    src={logoPreview}
+                                    alt="Logo"
+                                    className="w-full h-full object-contain p-1"
+                                />
+                            ) : (
+                                <ImageIcon className="h-8 w-8 text-gray-400 group-hover:text-indigo-400 transition-colors" />
+                            )}
+                            {uploadingLogo && (
+                                <div className="absolute inset-0 bg-white/80 flex items-center justify-center">
+                                    <Loader2 className="h-5 w-5 animate-spin text-indigo-500" />
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex-1 space-y-1">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={uploadingLogo}
+                                onClick={() => fileInputRef.current?.click()}
+                                className="gap-2"
+                            >
+                                <Upload className="h-3.5 w-3.5" />
+                                {logoPreview ? 'Alterar Logo' : 'Enviar Logo'}
+                            </Button>
+                            <p className="text-[11px] text-muted-foreground">
+                                PNG, JPG, WebP ou SVG. Máx 2MB.
+                            </p>
+                        </div>
+                    </div>
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                        className="hidden"
+                        onChange={handleLogoUpload}
+                    />
                 </div>
             )}
 

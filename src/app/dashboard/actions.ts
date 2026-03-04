@@ -181,3 +181,70 @@ export async function updateUserRole(targetUserId: string, newRole: 'admin' | 'p
     revalidatePath('/dashboard/equipe')
     return { success: true }
 }
+
+export async function uploadTenantLogo(formData: FormData) {
+    const supabase = await createClient()
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Unauthorized')
+
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('tenant_id, role')
+        .eq('id', user.id)
+        .single()
+
+    if (!profile?.tenant_id || (profile.role !== 'admin' && profile.role !== 'super_admin')) {
+        return { error: 'Permissão negada.' }
+    }
+
+    const file = formData.get('logo') as File
+    if (!file || file.size === 0) {
+        return { error: 'Nenhum arquivo selecionado.' }
+    }
+
+    // Validate file type
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']
+    if (!allowedTypes.includes(file.type)) {
+        return { error: 'Formato inválido. Use PNG, JPG, WebP ou SVG.' }
+    }
+
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+        return { error: 'Arquivo muito grande. Máximo 2MB.' }
+    }
+
+    const ext = file.name.split('.').pop() || 'png'
+    const filePath = `${profile.tenant_id}/logo.${ext}`
+
+    // Upload to storage
+    const { error: uploadError } = await supabase.storage
+        .from('tenant-logos')
+        .upload(filePath, file, { upsert: true, contentType: file.type })
+
+    if (uploadError) {
+        console.error('Upload Error:', uploadError)
+        return { error: 'Erro ao fazer upload do logo.' }
+    }
+
+    // Get public URL
+    const { data: urlData } = supabase.storage
+        .from('tenant-logos')
+        .getPublicUrl(filePath)
+
+    const logoUrl = `${urlData.publicUrl}?t=${Date.now()}`
+
+    // Update tenant
+    const { error: updateError } = await supabase
+        .from('tenants')
+        .update({ logo_url: logoUrl })
+        .eq('id', profile.tenant_id)
+
+    if (updateError) {
+        console.error('Update Logo Error:', updateError)
+        return { error: 'Erro ao salvar logo.' }
+    }
+
+    revalidatePath('/dashboard', 'layout')
+    return { success: true, logoUrl }
+}

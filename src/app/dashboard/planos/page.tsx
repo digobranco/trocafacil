@@ -16,6 +16,15 @@ import {
 import { getPlans, togglePlan, generateMonthlyAppointments, type MembershipPlan } from './actions'
 import { getPlanTypeLabel } from './utils'
 import { PlanDialog } from './plan-dialog'
+import { ViewToggle, useViewToggle } from '@/components/ui/view-toggle'
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table'
 
 function getPlanIcon(type: string) {
     switch (type) {
@@ -61,6 +70,7 @@ export default function PlansPage() {
     const [plans, setPlans] = useState<MembershipPlan[]>([])
     const [loading, setLoading] = useState(true)
     const [generating, setGenerating] = useState(false)
+    const { view, toggle } = useViewToggle('planos-view')
 
 
     useEffect(() => {
@@ -111,6 +121,7 @@ export default function PlansPage() {
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
+                    <ViewToggle view={view} onToggle={toggle} />
                     <Button
                         variant="outline"
                         onClick={handleGenerateMonthly}
@@ -138,71 +149,122 @@ export default function PlansPage() {
                     </CardContent>
                 </Card>
             ) : (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {plans.map((plan) => {
-                        const Icon = getPlanIcon(plan.plan_type)
-                        return (
-                            <Card key={plan.id} className={!plan.is_active ? 'opacity-60' : ''}>
-                                <CardHeader className="pb-3">
-                                    <div className="flex items-start justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <Icon className="h-5 w-5 text-primary" />
-                                            <CardTitle className="text-lg">{plan.name}</CardTitle>
-                                        </div>
-                                        <Badge className={getPlanBadgeColor(plan.plan_type)} variant="secondary">
-                                            {getPlanTypeLabel(plan.plan_type)}
-                                        </Badge>
-                                    </div>
-                                </CardHeader>
-                                <CardContent className="space-y-3">
-                                    {plan.description && (
-                                        <p className="text-sm text-muted-foreground">{plan.description}</p>
-                                    )}
+                <>
+                    {/* List View — desktop only */}
+                    {view === 'list' ? (
+                        <div className="hidden md:block rounded-md border">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Plano</TableHead>
+                                        <TableHead>Tipo</TableHead>
+                                        <TableHead>Detalhes</TableHead>
+                                        <TableHead>Preço</TableHead>
+                                        <TableHead>Val. Créditos</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead className="text-right">Ações</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {plans.map((plan) => {
+                                        const Icon = getPlanIcon(plan.plan_type)
+                                        return (
+                                            <TableRow key={plan.id} className={!plan.is_active ? 'opacity-60' : ''}>
+                                                <TableCell>
+                                                    <div className="flex items-center gap-2">
+                                                        <Icon className="h-4 w-4 text-primary" />
+                                                        <span className="font-medium">{plan.name}</span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge className={getPlanBadgeColor(plan.plan_type)} variant="secondary">
+                                                        {getPlanTypeLabel(plan.plan_type)}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-sm">{getPlanDetails(plan)}</TableCell>
+                                                <TableCell className="text-sm">
+                                                    {plan.plan_type === 'package' ? formatPrice(plan.package_price) : formatPrice(plan.monthly_price)}
+                                                    {plan.plan_type !== 'package' && plan.monthly_price ? '/mês' : ''}
+                                                </TableCell>
+                                                <TableCell className="text-sm">{plan.credit_validity_days} dias</TableCell>
+                                                <TableCell>
+                                                    <Badge variant={plan.is_active ? 'default' : 'secondary'}
+                                                        className={plan.is_active ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}>
+                                                        {plan.is_active ? 'Ativo' : 'Inativo'}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <div className="flex items-center gap-1 justify-end">
+                                                        <PlanDialog plan={plan} onSuccess={loadPlans} trigger={
+                                                            <Button variant="outline" size="sm"><Pencil className="mr-1 h-3 w-3" /> Editar</Button>
+                                                        } />
+                                                        <Button variant="outline" size="sm" onClick={() => handleToggle(plan.id, plan.is_active)}>
+                                                            {plan.is_active ? 'Desativar' : 'Ativar'}
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        )
+                                    })}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    ) : null}
 
-                                    <div className="space-y-1.5 text-sm">
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Detalhes:</span>
-                                            <span className="font-medium">{getPlanDetails(plan)}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Preço:</span>
-                                            <span className="font-medium">
-                                                {plan.plan_type === 'package'
-                                                    ? formatPrice(plan.package_price)
-                                                    : formatPrice(plan.monthly_price)
-                                                }
-                                                {plan.plan_type !== 'package' && plan.monthly_price ? '/mês' : ''}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Validade créditos:</span>
-                                            <span className="font-medium">{plan.credit_validity_days} dias</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center gap-2 pt-2 border-t">
-                                        <PlanDialog
-                                            plan={plan}
-                                            onSuccess={loadPlans}
-                                            trigger={
-                                                <Button variant="outline" size="sm">
-                                                    <Pencil className="mr-1 h-3 w-3" /> Editar
+                    {/* Card View — always on mobile, toggle on desktop */}
+                    <div className={view === 'list' ? 'md:hidden' : ''}>
+                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                            {plans.map((plan) => {
+                                const Icon = getPlanIcon(plan.plan_type)
+                                return (
+                                    <Card key={plan.id} className={!plan.is_active ? 'opacity-60' : ''}>
+                                        <CardHeader className="pb-3">
+                                            <div className="flex items-start justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <Icon className="h-5 w-5 text-primary" />
+                                                    <CardTitle className="text-lg">{plan.name}</CardTitle>
+                                                </div>
+                                                <Badge className={getPlanBadgeColor(plan.plan_type)} variant="secondary">
+                                                    {getPlanTypeLabel(plan.plan_type)}
+                                                </Badge>
+                                            </div>
+                                        </CardHeader>
+                                        <CardContent className="space-y-3">
+                                            {plan.description && (
+                                                <p className="text-sm text-muted-foreground">{plan.description}</p>
+                                            )}
+                                            <div className="space-y-1.5 text-sm">
+                                                <div className="flex justify-between">
+                                                    <span className="text-muted-foreground">Detalhes:</span>
+                                                    <span className="font-medium">{getPlanDetails(plan)}</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-muted-foreground">Preço:</span>
+                                                    <span className="font-medium">
+                                                        {plan.plan_type === 'package' ? formatPrice(plan.package_price) : formatPrice(plan.monthly_price)}
+                                                        {plan.plan_type !== 'package' && plan.monthly_price ? '/mês' : ''}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-muted-foreground">Validade créditos:</span>
+                                                    <span className="font-medium">{plan.credit_validity_days} dias</span>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2 pt-2 border-t">
+                                                <PlanDialog plan={plan} onSuccess={loadPlans} trigger={
+                                                    <Button variant="outline" size="sm"><Pencil className="mr-1 h-3 w-3" /> Editar</Button>
+                                                } />
+                                                <Button variant="outline" size="sm" onClick={() => handleToggle(plan.id, plan.is_active)}>
+                                                    {plan.is_active ? 'Desativar' : 'Ativar'}
                                                 </Button>
-                                            }
-                                        />
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => handleToggle(plan.id, plan.is_active)}
-                                        >
-                                            {plan.is_active ? 'Desativar' : 'Ativar'}
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        )
-                    })}
-                </div>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                )
+                            })}
+                        </div>
+                    </div>
+                </>
             )}
         </div>
     )

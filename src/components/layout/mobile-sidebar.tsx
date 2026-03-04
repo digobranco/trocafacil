@@ -12,9 +12,11 @@ import { Sidebar } from './sidebar'
 
 interface MobileSidebarProps {
     role?: 'super_admin' | 'admin' | 'professional' | 'customer'
+    tenantLogo?: string | null
+    tenantName?: string | null
 }
 
-export function MobileSidebar({ role }: MobileSidebarProps) {
+export function MobileSidebar({ role, tenantLogo, tenantName }: MobileSidebarProps) {
     const [open, setOpen] = useState(false)
 
     return (
@@ -34,6 +36,8 @@ export function MobileSidebar({ role }: MobileSidebarProps) {
                     className="h-full"
                     role={role}
                     onNavigate={() => setOpen(false)}
+                    tenantLogo={tenantLogo}
+                    tenantName={tenantName}
                 />
             </SheetContent>
         </Sheet>

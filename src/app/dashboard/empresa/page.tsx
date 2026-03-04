@@ -64,6 +64,7 @@ export default async function EmpresaPage() {
                                 defaultCreditValidity={tenant.credit_validity_days}
                                 inviteCode={tenant.invite_code}
                                 isActive={tenant.is_active}
+                                defaultLogoUrl={tenant.logo_url}
                             />
                         </CardContent>
                     </Card>

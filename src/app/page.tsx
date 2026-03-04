@@ -33,7 +33,7 @@ export default function Home() {
       </main>
 
       <footer className="py-6 text-center text-sm text-gray-500 border-t bg-white">
-        © 2024 TrocaFácil. Todos os direitos reservados.
+        © 2026 TrocaFácil. Todos os direitos reservados.
       </footer>
     </div>
   )

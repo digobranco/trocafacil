@@ -25,6 +25,10 @@ export default async function DashboardLayout({
         .eq('id', user.id)
         .single()
 
+    // Fetch tenant info for branding
+    let tenantLogo: string | null = null
+    let tenantName: string | null = null
+
     // Super Admin impersonation check
     let impersonatingTenantName: string | null = null
     let effectiveRole = profile?.role
@@ -35,12 +39,14 @@ export default async function DashboardLayout({
             // Super admin is impersonating — fetch tenant name for the banner
             const { data: tenant } = await supabase
                 .from('tenants')
-                .select('name')
+                .select('name, logo_url')
                 .eq('id', impersonatingTenantId)
                 .single()
 
             if (tenant) {
                 impersonatingTenantName = tenant.name
+                tenantLogo = tenant.logo_url
+                tenantName = tenant.name
                 effectiveRole = 'admin' // Show admin sidebar items
             } else {
                 // Invalid tenant ID in cookie — redirect to admin
@@ -49,6 +55,19 @@ export default async function DashboardLayout({
         } else {
             // Super Admin not impersonating — redirect to admin panel
             redirect('/admin')
+        }
+    }
+
+    // Fetch tenant branding for normal users
+    if (!tenantName && profile?.tenant_id) {
+        const { data: tenant } = await supabase
+            .from('tenants')
+            .select('name, logo_url')
+            .eq('id', profile.tenant_id)
+            .single()
+        if (tenant) {
+            tenantLogo = tenant.logo_url
+            tenantName = tenant.name
         }
     }
 
@@ -62,7 +81,7 @@ export default async function DashboardLayout({
             <div className="flex flex-1 overflow-hidden">
                 {/* Desktop Sidebar */}
                 <aside className="hidden w-64 border-r bg-muted/40 md:block">
-                    <Sidebar className="h-full" role={effectiveRole as any} />
+                    <Sidebar className="h-full" role={effectiveRole as any} tenantLogo={tenantLogo} tenantName={tenantName} />
                 </aside>
 
                 {/* Main Content */}
@@ -70,7 +89,7 @@ export default async function DashboardLayout({
                     {/* Header */}
                     <header className="flex h-14 md:h-16 items-center justify-between border-b px-3 md:px-6">
                         {/* Mobile Menu */}
-                        <MobileSidebar role={effectiveRole as any} />
+                        <MobileSidebar role={effectiveRole as any} tenantLogo={tenantLogo} tenantName={tenantName} />
                         <div className="ml-auto flex items-center space-x-4">
                             <UserNav email={user.email!} />
                         </div>

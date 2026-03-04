@@ -171,7 +171,7 @@ export async function adjustCustomerCredits(customerId: string, delta: number) {
 
 export async function getCustomerCreditLogs(customerId: string) {
     const ctx = await getAuthContext()
-    if (!ctx) throw new Error('Unauthorized')
+    if (!ctx) return []
 
     const { data, error } = await ctx.supabase
         .from('credit_logs')

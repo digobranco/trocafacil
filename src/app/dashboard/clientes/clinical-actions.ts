@@ -79,8 +79,8 @@ export async function getClinicalDetails(customerId: string) {
     const ctx = await getAuthContext()
     if (!ctx || ctx.role === 'customer') return null
 
-    // Fetch anamnesis and evolutions in PARALLEL
-    const [anamnesisRes, evolutionsRes] = await Promise.all([
+    // Fetch anamnesis, evolutions, and templates in PARALLEL
+    const [anamnesisRes, evolutionsRes, templatesRes] = await Promise.all([
         ctx.supabase.from('anamnesis').select('*').eq('client_id', customerId).maybeSingle(),
         ctx.supabase.from('evolutions')
             .select(`
@@ -88,11 +88,17 @@ export async function getClinicalDetails(customerId: string) {
                 professional:profiles(full_name)
             `)
             .eq('client_id', customerId)
-            .order('created_at', { ascending: false })
+            .order('created_at', { ascending: false }),
+        ctx.supabase.from('anamnesis_templates')
+            .select('*')
+            .eq('tenant_id', ctx.tenantId)
+            .eq('is_active', true)
+            .order('sort_order', { ascending: true })
     ])
 
     return {
         anamnesis: anamnesisRes.data,
-        evolutions: evolutionsRes.data || []
+        evolutions: evolutionsRes.data || [],
+        templates: templatesRes.data || []
     }
 }

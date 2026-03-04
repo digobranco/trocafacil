@@ -144,7 +144,7 @@ export default async function CustomerDetailsPage({ params }: Props) {
                         </TabsContent>
 
                         <TabsContent value="anamnesis" className="space-y-6">
-                            <AnamnesisForm customerId={customer.id} initialData={clinicalDetails?.anamnesis} />
+                            <AnamnesisForm customerId={customer.id} initialData={clinicalDetails?.anamnesis} templates={clinicalDetails?.templates || []} />
                         </TabsContent>
 
                         <TabsContent value="evolution" className="space-y-6">
