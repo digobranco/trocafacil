@@ -83,6 +83,17 @@ export function CreditManager({ customerId, initialCredits }: CreditManagerProps
                     +10 Créditos
                 </Button>
             </div>
+            <div className="flex gap-2">
+                <Button
+                    variant="outline"
+                    className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                    onClick={() => handleAdjust(-currentCredits)}
+                    disabled={loading || currentCredits <= 0}
+                >
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Minus className="h-5 w-5 mr-2" />}
+                    Remover Todos
+                </Button>
+            </div>
         </div>
     )
 }

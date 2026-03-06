@@ -411,23 +411,86 @@ export async function getAppointmentFormData() {
     }
 }
 
-export async function updateAppointmentStatus(id: string, status: 'scheduled' | 'completed' | 'cancelled' | 'rescheduled' | 'absent') {
+export async function updateAppointmentStatus(
+    id: string,
+    status: 'scheduled' | 'completed' | 'cancelled' | 'rescheduled' | 'absent' | 'justified_absence',
+    generateCredit: boolean = false
+) {
     const ctx = await getAuthContext()
     if (!ctx) throw new Error('Unauthorized')
     if (ctx.role === 'customer') throw new Error('Unauthorized')
 
-    const { error } = await ctx.supabase
+    const { supabase, tenantId } = ctx
+
+    // 1. Update the status
+    const { data: appointment, error } = await supabase
         .from('appointments')
         .update({ status })
         .eq('id', id)
-        .eq('tenant_id', ctx.tenantId)
+        .eq('tenant_id', tenantId)
+        .select('client_id, tenants(credit_validity_days)')
+        .single()
 
     if (error) {
         console.error('Error updating appointment status:', error)
         return { error: 'Falha ao atualizar status do agendamento.' }
     }
 
+    // 2. If justified_absence and generateCredit, add 1 credit
+    if (status === 'justified_absence' && generateCredit && appointment.client_id) {
+        // @ts-ignore
+        const validityDays = appointment.tenants?.credit_validity_days ?? 30
+        const validUntil = new Date()
+        validUntil.setDate(validUntil.getDate() + validityDays)
+
+        const { data: existingCredit } = await supabase
+            .from('credits')
+            .select('id, quantity')
+            .eq('client_id', appointment.client_id)
+            .eq('tenant_id', tenantId)
+            .maybeSingle()
+
+        if (existingCredit) {
+            await supabase
+                .from('credits')
+                .update({
+                    quantity: (existingCredit.quantity || 0) + 1,
+                    valid_until: validUntil.toISOString()
+                })
+                .eq('id', existingCredit.id)
+
+            await supabase.from('credit_logs').insert({
+                tenant_id: tenantId,
+                client_id: appointment.client_id,
+                quantity_change: 1,
+                type: 'cancellation_refund',
+                notes: 'Crédito por falta justificada'
+            })
+        } else {
+            await supabase
+                .from('credits')
+                .insert({
+                    tenant_id: tenantId,
+                    client_id: appointment.client_id,
+                    quantity: 1,
+                    valid_until: validUntil.toISOString()
+                })
+
+            await supabase.from('credit_logs').insert({
+                tenant_id: tenantId,
+                client_id: appointment.client_id,
+                quantity_change: 1,
+                type: 'cancellation_refund',
+                notes: 'Crédito inicial por falta justificada'
+            })
+        }
+    }
+
     revalidatePath('/dashboard/agenda')
+    revalidatePath('/dashboard')
+    if (appointment.client_id) {
+        revalidatePath(`/dashboard/clientes/${appointment.client_id}`)
+    }
     return { success: true }
 }
 

@@ -104,20 +104,29 @@ export function MembershipDialog({ clientId, clientName, onSuccess, trigger }: M
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
 
-        if (!selectedPlanId || !selectedProfessionalId || !selectedServiceId) {
-            alert('Preencha todos os campos obrigatórios.')
-            return
-        }
-
-        if (selectedDays.length === 0) {
-            alert('Selecione pelo menos um dia da semana.')
+        if (!selectedPlanId) {
+            alert('Selecione um plano.')
             return
         }
 
         const selectedPlan = plans.find(p => p.id === selectedPlanId)
-        if (selectedPlan?.weekly_frequency && selectedDays.length !== selectedPlan.weekly_frequency) {
-            alert(`O plano exige exatamente ${selectedPlan.weekly_frequency} dia(s) por semana.`)
-            return
+        const isWeekly = selectedPlan?.plan_type === 'weekly_frequency'
+
+        if (isWeekly) {
+            if (!selectedProfessionalId || !selectedServiceId) {
+                alert('Preencha todos os campos obrigatórios de agendamento.')
+                return
+            }
+
+            if (selectedDays.length === 0) {
+                alert('Selecione pelo menos um dia da semana.')
+                return
+            }
+
+            if (selectedPlan?.weekly_frequency && selectedDays.length !== selectedPlan.weekly_frequency) {
+                alert(`O plano exige exatamente ${selectedPlan.weekly_frequency} dia(s) por semana.`)
+                return
+            }
         }
 
         setLoading(true)
@@ -134,7 +143,7 @@ export function MembershipDialog({ clientId, clientName, onSuccess, trigger }: M
         setLoading(false)
 
         if (res.success) {
-            alert(`Plano atribuído com sucesso! ${res.count} agendamento(s) criado(s).`)
+            alert(`Plano atribuído com sucesso! ${res.count > 0 ? `${res.count} agendamento(s) criado(s).` : ''}`)
             setOpen(false)
             // Reset form
             setSelectedPlanId('')
@@ -143,7 +152,7 @@ export function MembershipDialog({ clientId, clientName, onSuccess, trigger }: M
             setSelectedDays([])
             setScheduleTime('09:00')
             setWeeks(4)
-            // Refresh appointments list
+            // Refresh
             window.dispatchEvent(new CustomEvent('appointment-updated'))
             onSuccess?.()
         } else {
@@ -152,6 +161,7 @@ export function MembershipDialog({ clientId, clientName, onSuccess, trigger }: M
     }
 
     const selectedPlan = plans.find(p => p.id === selectedPlanId)
+    const isWeekly = selectedPlan?.plan_type === 'weekly_frequency'
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
@@ -169,8 +179,9 @@ export function MembershipDialog({ clientId, clientName, onSuccess, trigger }: M
                         Atribuir Plano
                     </DialogTitle>
                     <DialogDescription>
-                        Atribuir um plano com agendamento recorrente para <strong>{clientName}</strong>.
-                        {'\n'}Os agendamentos serão criados automaticamente.
+                        {isWeekly
+                            ? `Atribuir um plano com agendamento recorrente para ${clientName}.`
+                            : `Atribuir um plano de créditos para ${clientName}.`}
                     </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="grid gap-5 py-4">
@@ -196,93 +207,17 @@ export function MembershipDialog({ clientId, clientName, onSuccess, trigger }: M
                             {selectedPlan.plan_type === 'weekly_frequency' && (
                                 <p>📅 {selectedPlan.weekly_frequency}x por semana</p>
                             )}
+                            {selectedPlan.plan_type === 'monthly_credits' && (
+                                <p>🪙 {selectedPlan.credits_per_month} créditos por mês</p>
+                            )}
+                            {selectedPlan.plan_type === 'package' && (
+                                <p>📦 {selectedPlan.total_credits} créditos totais</p>
+                            )}
                             {(selectedPlan.monthly_price || selectedPlan.package_price) && (
                                 <p>💰 R$ {(selectedPlan.plan_type === 'package' ? selectedPlan.package_price : selectedPlan.monthly_price)?.toFixed(2)}</p>
                             )}
                         </div>
                     )}
-
-                    {/* Professional Selection */}
-                    <div className="grid grid-cols-4 items-center gap-4">
-                        <Label className="text-right text-sm flex items-center justify-end gap-1">
-                            <User className="h-3 w-3" /> Prof. *
-                        </Label>
-                        <Select value={selectedProfessionalId} onValueChange={handleProfessionalChange}>
-                            <SelectTrigger className="col-span-3">
-                                <SelectValue placeholder="Selecione o profissional" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {professionals.map((p) => (
-                                    <SelectItem key={p.id} value={p.id}>
-                                        {p.name}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    {/* Service Selection */}
-                    {selectedProfessionalId && (
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label className="text-right text-sm flex items-center justify-end gap-1">
-                                <Briefcase className="h-3 w-3" /> Serviço *
-                            </Label>
-                            <Select value={selectedServiceId} onValueChange={setSelectedServiceId}>
-                                <SelectTrigger className="col-span-3">
-                                    <SelectValue placeholder="Selecione o serviço" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {services.map((s) => (
-                                        <SelectItem key={s.id} value={s.id}>
-                                            {s.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    )}
-
-                    {/* Days of Week */}
-                    {selectedPlanId && (
-                        <div className="grid grid-cols-4 items-start gap-4">
-                            <Label className="text-right text-sm pt-2">Dias *</Label>
-                            <div className="col-span-3">
-                                <div className="flex flex-wrap gap-3">
-                                    {DAY_NAMES.map((day) => (
-                                        <label
-                                            key={day.value}
-                                            className="flex items-center gap-1.5 cursor-pointer"
-                                        >
-                                            <Checkbox
-                                                checked={selectedDays.includes(day.value)}
-                                                onCheckedChange={(checked: any) => handleDayToggle(day.value, !!checked)}
-                                            />
-                                            <span className="text-sm">{day.label}</span>
-                                        </label>
-                                    ))}
-                                </div>
-                                {selectedPlan?.weekly_frequency && (
-                                    <p className="text-xs text-muted-foreground mt-1.5">
-                                        Selecione {selectedPlan.weekly_frequency} dia(s) — {selectedDays.length}/{selectedPlan.weekly_frequency} selecionado(s)
-                                    </p>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Time */}
-                    <div className="grid grid-cols-4 items-center gap-4">
-                        <Label className="text-right text-sm flex items-center justify-end gap-1">
-                            <Clock className="h-3 w-3" /> Horário *
-                        </Label>
-                        <Input
-                            type="time"
-                            className="col-span-3"
-                            value={scheduleTime}
-                            onChange={(e) => setScheduleTime(e.target.value)}
-                            required
-                        />
-                    </div>
 
                     {/* Start Date */}
                     <div className="grid grid-cols-4 items-center gap-4">
@@ -296,29 +231,116 @@ export function MembershipDialog({ clientId, clientName, onSuccess, trigger }: M
                         />
                     </div>
 
-                    {/* Weeks */}
-                    <div className="grid grid-cols-4 items-center gap-4">
-                        <Label className="text-right text-sm">Semanas</Label>
-                        <Select value={String(weeks)} onValueChange={(v) => setWeeks(Number(v))}>
-                            <SelectTrigger className="col-span-3">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="2">2 semanas</SelectItem>
-                                <SelectItem value="4">4 semanas</SelectItem>
-                                <SelectItem value="6">6 semanas</SelectItem>
-                                <SelectItem value="8">8 semanas</SelectItem>
-                                <SelectItem value="12">12 semanas</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
+                    {/* Weekly Frequency Fields */}
+                    {isWeekly && (
+                        <>
+                            <div className="border-t pt-4 mt-2">
+                                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-4 ml-[25%]">
+                                    Configuração de Agendamento
+                                </Label>
+
+                                {/* Professional Selection */}
+                                <div className="grid grid-cols-4 items-center gap-4 mb-4">
+                                    <Label className="text-right text-sm flex items-center justify-end gap-1">
+                                        <User className="h-3 w-3" /> Prof. *
+                                    </Label>
+                                    <Select value={selectedProfessionalId} onValueChange={handleProfessionalChange}>
+                                        <SelectTrigger className="col-span-3">
+                                            <SelectValue placeholder="Selecione o profissional" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {professionals.map((p) => (
+                                                <SelectItem key={p.id} value={p.id}>
+                                                    {p.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                {/* Service Selection */}
+                                {selectedProfessionalId && (
+                                    <div className="grid grid-cols-4 items-center gap-4 mb-4">
+                                        <Label className="text-right text-sm flex items-center justify-end gap-1">
+                                            <Briefcase className="h-3 w-3" /> Serviço *
+                                        </Label>
+                                        <Select value={selectedServiceId} onValueChange={setSelectedServiceId}>
+                                            <SelectTrigger className="col-span-3">
+                                                <SelectValue placeholder="Selecione o serviço" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {services.map((s) => (
+                                                    <SelectItem key={s.id} value={s.id}>
+                                                        {s.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
+
+                                {/* Days of Week */}
+                                <div className="grid grid-cols-4 items-start gap-4 mb-4">
+                                    <Label className="text-right text-sm pt-2">Dias *</Label>
+                                    <div className="col-span-3">
+                                        <div className="flex flex-wrap gap-3">
+                                            {DAY_NAMES.map((day) => (
+                                                <label key={day.value} className="flex items-center gap-1.5 cursor-pointer">
+                                                    <Checkbox
+                                                        checked={selectedDays.includes(day.value)}
+                                                        onCheckedChange={(checked: any) => handleDayToggle(day.value, !!checked)}
+                                                    />
+                                                    <span className="text-sm">{day.label}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                        {selectedPlan?.weekly_frequency && (
+                                            <p className="text-xs text-muted-foreground mt-1.5">
+                                                Selecione {selectedPlan.weekly_frequency} dia(s) — {selectedDays.length}/{selectedPlan.weekly_frequency} selecionado(s)
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Time */}
+                                <div className="grid grid-cols-4 items-center gap-4 mb-4">
+                                    <Label className="text-right text-sm flex items-center justify-end gap-1">
+                                        <Clock className="h-3 w-3" /> Horário *
+                                    </Label>
+                                    <Input
+                                        type="time"
+                                        className="col-span-3"
+                                        value={scheduleTime}
+                                        onChange={(e) => setScheduleTime(e.target.value)}
+                                        required
+                                    />
+                                </div>
+
+                                {/* Duration in Months */}
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label className="text-right text-sm">Duração *</Label>
+                                    <Select value={String(weeks)} onValueChange={(v) => setWeeks(Number(v))}>
+                                        <SelectTrigger className="col-span-3">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="4">1 mês (Mês atual completo)</SelectItem>
+                                            <SelectItem value="8">2 meses</SelectItem>
+                                            <SelectItem value="12">3 meses</SelectItem>
+                                            <SelectItem value="24">6 meses</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                        </>
+                    )}
 
                     <div className="flex justify-end pt-4">
                         <Button
                             type="submit"
-                            disabled={loading || !selectedPlanId || !selectedProfessionalId || !selectedServiceId || selectedDays.length === 0}
+                            disabled={loading || !selectedPlanId || (isWeekly && (!selectedProfessionalId || !selectedServiceId || selectedDays.length === 0))}
                         >
-                            {loading ? 'Criando agendamentos...' : 'Atribuir Plano'}
+                            {loading ? 'Processando...' : 'Atribuir Plano'}
                         </Button>
                     </div>
                 </form>

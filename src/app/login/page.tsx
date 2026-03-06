@@ -1,11 +1,12 @@
-import { login } from './actions'
+import { login, resendConfirmation } from './actions'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
+import { Mail } from 'lucide-react'
 
 export default async function LoginPage({
     searchParams,
 }: {
-    searchParams: Promise<{ message: string, error: string }>
+    searchParams: Promise<{ message?: string; error?: string; unconfirmed?: string; email?: string }>
 }) {
     const params = await searchParams
 
@@ -27,9 +28,30 @@ export default async function LoginPage({
                     </div>
                 )}
 
-                {params?.error && (
+                {params?.error && !params.unconfirmed && (
                     <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded-md text-center font-medium">
                         {params.error}
+                    </div>
+                )}
+
+                {params.unconfirmed && (
+                    <div className="p-6 bg-amber-50 border border-amber-200 rounded-xl space-y-4">
+                        <div className="flex items-center gap-3 text-amber-800">
+                            <Mail className="h-5 w-5" />
+                            <p className="font-bold">Email não confirmado</p>
+                        </div>
+                        <p className="text-sm text-amber-700">
+                            Detectamos que você ainda não confirmou seu endereço de email. Verifique sua caixa de entrada ou clique abaixo para receber um novo link.
+                        </p>
+                        <form action={resendConfirmation}>
+                            <input type="hidden" name="email" value={params.email || ''} />
+                            <Button
+                                variant="outline"
+                                className="w-full border-amber-300 text-amber-800 hover:bg-amber-100"
+                            >
+                                Reenviar Email de Confirmação
+                            </Button>
+                        </form>
                     </div>
                 )}
 
@@ -44,6 +66,7 @@ export default async function LoginPage({
                                 name="email"
                                 type="email"
                                 required
+                                defaultValue={params.email || ''}
                                 className="relative block w-full rounded-md border-0 py-1.5 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 px-3"
                                 placeholder="Seu email"
                             />

@@ -13,7 +13,7 @@ import {
     Infinity,
     Package,
 } from 'lucide-react'
-import { getPlans, togglePlan, generateMonthlyAppointments, type MembershipPlan } from './actions'
+import { getPlans, togglePlan, processAutomatedRenewals, type MembershipPlan } from './actions'
 import { getPlanTypeLabel } from './utils'
 import { PlanDialog } from './plan-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -94,15 +94,16 @@ export default function PlansPage() {
         }
     }
 
-    async function handleGenerateMonthly() {
-        if (!confirm('Gerar agendamentos recorrentes para todas as assinaturas ativas?')) return
+    async function handleProcessRenewals() {
+        if (!confirm('Processar renovações e gerar agendamentos para todas as assinaturas vencidas?')) return
         setGenerating(true)
-        const res = await generateMonthlyAppointments()
+        const res = await processAutomatedRenewals()
+        setGenerating(true) // Keep loading state until done (res is already back)
         setGenerating(false)
         if (res.error) {
             alert(res.error)
         } else {
-            alert(`${res.count} agendamento(s) criado(s) com sucesso.`)
+            alert(`${res.count} assinatura(s) processada(s) com sucesso.`)
         }
     }
 
@@ -125,14 +126,15 @@ export default function PlansPage() {
                     <ViewToggle view={view} onToggle={toggle} />
                     <Button
                         variant="outline"
-                        onClick={handleGenerateMonthly}
+                        onClick={handleProcessRenewals}
                         disabled={generating}
+                        title="Processar cobranças e novos agendamentos"
                     >
                         {generating
                             ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             : <CalendarDays className="mr-2 h-4 w-4" />
                         }
-                        Gerar Agendamentos do Mês
+                        Processar Renovações
                     </Button>
                     <PlanDialog onSuccess={loadPlans} />
                 </div>

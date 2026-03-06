@@ -11,7 +11,9 @@ export async function GET(request: Request) {
         const { error } = await supabase.auth.exchangeCodeForSession(code)
         if (error) {
             console.error('Auth Exchange Error:', error)
-            return NextResponse.redirect(`${origin}/login?error=O link de confirmação expirou ou já foi utilizado.`)
+            // The link might have been pre-fetched by an email scanner. 
+            // We redirect to login with a message that's less "scary" if they already have an account.
+            return NextResponse.redirect(`${origin}/login?message=Link de confirmação processado. Se você já confirmou, tente acessar sua conta.`)
         } else {
             const forwardedHost = request.headers.get('x-forwarded-host')
             const isLocalEnv = process.env.NODE_ENV === 'development'

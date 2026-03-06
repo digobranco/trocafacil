@@ -80,9 +80,13 @@ export function AppointmentDetailsDialog({
         }
     }
 
-    async function handleStatusUpdate(id: string, status: 'completed' | 'absent' | 'scheduled') {
+    async function handleStatusUpdate(
+        id: string,
+        status: 'completed' | 'absent' | 'scheduled' | 'justified_absence',
+        generateCredit: boolean = false
+    ) {
         try {
-            const res = await updateAppointmentStatus(id, status)
+            const res = await updateAppointmentStatus(id, status, generateCredit)
             if (res.success) {
                 setAppointments(prev => prev.map(app => app.id === id ? { ...app, status } : app))
             }
@@ -144,6 +148,7 @@ export function AppointmentDetailsDialog({
     const getCardBg = (status: string) => {
         if (status === 'completed') return 'border-green-300 bg-green-50/70'
         if (status === 'absent') return 'border-red-300 bg-red-50/70'
+        if (status === 'justified_absence') return 'border-amber-300 bg-amber-50/70'
         return 'border-slate-200 bg-white'
     }
 
@@ -208,13 +213,15 @@ export function AppointmentDetailsDialog({
                                 <div key={app.id} className={`p-4 border rounded-xl space-y-3 transition-all duration-300 ${getCardBg(app.status)}`}>
                                     <div className="flex items-start justify-between">
                                         <div className="flex items-center gap-3">
-                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${app.status === 'completed' ? 'bg-green-100' : app.status === 'absent' ? 'bg-red-100' : 'bg-slate-100'
+                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${app.status === 'completed' ? 'bg-green-100' : app.status === 'absent' ? 'bg-red-100' : app.status === 'justified_absence' ? 'bg-amber-100' : 'bg-slate-100'
                                                 }`}>
                                                 {app.status === 'completed'
                                                     ? <CheckCircle2 className="h-5 w-5 text-green-600" />
                                                     : app.status === 'absent'
                                                         ? <XCircle className="h-5 w-5 text-red-600" />
-                                                        : <UserIcon className="h-5 w-5 text-slate-400" />
+                                                        : app.status === 'justified_absence'
+                                                            ? <Clock className="h-5 w-5 text-amber-600" />
+                                                            : <UserIcon className="h-5 w-5 text-slate-400" />
                                                 }
                                             </div>
                                             <div>
@@ -230,6 +237,7 @@ export function AppointmentDetailsDialog({
                                                 variant={app.status === 'completed' ? 'default' : 'ghost'}
                                                 className={app.status === 'completed' ? 'bg-green-600 hover:bg-green-700 h-8 px-2' : 'h-8 px-2 text-slate-400 hover:text-green-600'}
                                                 onClick={() => handleStatusUpdate(app.id, app.status === 'completed' ? 'scheduled' : 'completed')}
+                                                title="Marcar como Presente"
                                             >
                                                 <Check className="h-4 w-4" />
                                             </Button>
@@ -238,8 +246,26 @@ export function AppointmentDetailsDialog({
                                                 variant={app.status === 'absent' ? 'destructive' : 'ghost'}
                                                 className={app.status === 'absent' ? 'bg-red-600 hover:bg-red-700 h-8 px-2' : 'h-8 px-2 text-slate-400 hover:text-red-600'}
                                                 onClick={() => handleStatusUpdate(app.id, app.status === 'absent' ? 'scheduled' : 'absent')}
+                                                title="Marcar como Falta"
                                             >
                                                 <X className="h-4 w-4" />
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant={app.status === 'justified_absence' ? 'default' : 'ghost'}
+                                                className={app.status === 'justified_absence' ? 'bg-amber-500 hover:bg-amber-600 h-8 px-2 text-white' : 'h-8 px-2 text-slate-400 hover:text-amber-600'}
+                                                onClick={() => {
+                                                    if (app.status === 'justified_absence') {
+                                                        handleStatusUpdate(app.id, 'scheduled')
+                                                    } else {
+                                                        //const generate = window.confirm('Deseja gerar 1 crédito de reposição para este aluno?')
+                                                        const generate = true;
+                                                        handleStatusUpdate(app.id, 'justified_absence', generate)
+                                                    }
+                                                }}
+                                                title="Marcar como Falta Justificada"
+                                            >
+                                                <Clock className="h-4 w-4" />
                                             </Button>
                                         </div>
                                     </div>

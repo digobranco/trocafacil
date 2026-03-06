@@ -38,6 +38,29 @@ export default async function DashboardPage() {
         .single()
 
     if (!profile?.tenant_id) {
+        // Fallback safety check: Maybe the trigger finished but the data is not indexed yet
+        // or there's a slight delay. We can check the auth metadata as a hint.
+        const inviteCode = user.user_metadata?.invite_code
+        if (inviteCode) {
+            // Try to find tenant by this code and update profile manually
+            const { data: tenant } = await supabase
+                .from('tenants')
+                .select('id')
+                .eq('invite_code', inviteCode)
+                .single()
+
+            if (tenant) {
+                // Manually update the profile to fix the delay
+                await supabase
+                    .from('profiles')
+                    .update({ tenant_id: tenant.id })
+                    .eq('id', user.id)
+
+                // Refresh the page data
+                redirect('/dashboard')
+            }
+        }
+
         redirect('/dashboard/onboarding')
     }
 

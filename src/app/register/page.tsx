@@ -1,16 +1,19 @@
 'use client'
 
-import { useState, use } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { signup } from '../login/actions'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 
-export default function RegisterPage({
-    searchParams,
-}: {
-    searchParams: Promise<{ code?: string; email?: string; name?: string }>
-}) {
-    const params = use(searchParams)
+function RegisterForm() {
+    const searchParams = useSearchParams()
+
+    // Parameters from URL
+    const code = searchParams.get('code')
+    const emailParam = searchParams.get('email')
+    const nameParam = searchParams.get('name')
+
     const [phone, setPhone] = useState('')
     const [loading, setLoading] = useState(false)
 
@@ -50,7 +53,7 @@ export default function RegisterPage({
                     <p className="mt-2 text-sm text-gray-600">
                         Preencha seus dados para começar a gerenciar seus agendamentos
                     </p>
-                    {params.code && (
+                    {code && (
                         <div className="mt-4 p-2 bg-indigo-50 border border-indigo-100 rounded text-xs text-indigo-700 font-medium">
                             ✓ Link de convite detectado
                         </div>
@@ -58,7 +61,7 @@ export default function RegisterPage({
                 </div>
 
                 <form action={handleSignup} className="mt-8 space-y-6" autoComplete="off">
-                    <input type="hidden" name="invite_code" defaultValue={params.code || ''} />
+                    <input type="hidden" name="invite_code" key={code || 'no-code'} defaultValue={code || ''} />
 
                     <div className="space-y-4 rounded-md shadow-sm">
                         <div>
@@ -71,7 +74,7 @@ export default function RegisterPage({
                                 type="text"
                                 required
                                 autoComplete="new-name"
-                                defaultValue={params.name || ''}
+                                defaultValue={nameParam || ''}
                                 className="relative block w-full rounded-md border-0 py-1.5 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 px-3"
                                 placeholder="Ex: João Silva"
                             />
@@ -104,7 +107,7 @@ export default function RegisterPage({
                                 type="email"
                                 required
                                 autoComplete="new-email"
-                                defaultValue={params.email || ''}
+                                defaultValue={emailParam || ''}
                                 className="relative block w-full rounded-md border-0 py-1.5 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 px-3"
                                 placeholder="email@exemplo.com"
                             />
@@ -145,5 +148,13 @@ export default function RegisterPage({
                 </form>
             </div>
         </div>
+    )
+}
+
+export default function RegisterPage() {
+    return (
+        <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Carregando...</div>}>
+            <RegisterForm />
+        </Suspense>
     )
 }

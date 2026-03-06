@@ -2,7 +2,14 @@
 
 import { revalidatePath } from 'next/cache'
 import { getAuthContext } from '@/utils/auth-context'
-import { addWeeks, endOfMonth, isBefore } from 'date-fns'
+import {
+    addWeeks,
+    addMonths,
+    endOfMonth,
+    isBefore,
+    startOfMonth,
+    format
+} from 'date-fns'
 import { randomUUID } from 'crypto'
 
 // ==========================================
@@ -267,155 +274,171 @@ export async function createClientMembership(data: {
         return { error: 'Plano não encontrado.' }
     }
 
-    // Get service duration
-    const { data: serviceData } = await supabase
-        .from('professional_services')
-        .select(`
-            custom_duration_minutes,
-            services (
-                duration_minutes
-            )
-        `)
-        .eq('professional_id', data.professionalId)
-        .eq('service_id', data.serviceId)
-        .single()
+    const isWeekly = plan.plan_type === 'weekly_frequency'
+    let appointments = []
+    let groupId = null
 
-    if (!serviceData) {
-        return { error: 'Serviço não encontrado para este profissional.' }
-    }
-
-    const service = serviceData.services as unknown as { duration_minutes: number }
-    const durationMinutes = serviceData.custom_duration_minutes ?? service.duration_minutes
-
-    const [hour, minute] = data.scheduleTime.split(':').map(Number)
-    const [year, month, day] = data.startDate.split('-').map(Number)
-    const baseDate = new Date(year, month - 1, day)
-    const baseDayOfWeek = baseDate.getDay()
-    const monthEnd = endOfMonth(baseDate)
-    const groupId = randomUUID()
-
-    const appointments = []
-    const now = new Date()
-    const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
-
-    let week = 0
-    let checkingDate = new Date(baseDate)
-
-    while (isBefore(checkingDate, monthEnd)) {
-        const weekBaseDate = addWeeks(baseDate, week)
-        checkingDate = weekBaseDate
-
-        for (const targetDay of data.scheduleDays) {
-            const dayDiff = targetDay - baseDayOfWeek
-            const startTime = new Date(weekBaseDate)
-            startTime.setDate(startTime.getDate() + dayDiff)
-            startTime.setHours(hour, minute, 0, 0)
-
-            // Skip past dates
-            if (startTime < now) continue
-
-            const endTime = new Date(startTime.getTime() + durationMinutes * 60000)
-
-            appointments.push({
-                tenant_id: tenantId,
-                client_id: data.clientId,
-                professional_id: data.professionalId,
-                service_id: data.serviceId,
-                start_time: startTime.toISOString(),
-                end_time: endTime.toISOString(),
-                status: 'scheduled',
-                type: 'recurring',
-                recurring_group_id: groupId,
-            })
+    if (isWeekly) {
+        // Validation for weekly plans
+        if (!data.professionalId || !data.serviceId || !data.scheduleDays || data.scheduleDays.length === 0) {
+            return { error: 'Campos de agendamento são obrigatórios para planos semanais.' }
         }
-        week++
-        checkingDate = addWeeks(baseDate, week)
-    }
 
-    if (appointments.length === 0) {
-        return { error: 'Nenhum agendamento futuro pode ser gerado com os parâmetros informados.' }
-    }
-
-    // ==========================================
-    // 2. Validate ALL slots BEFORE creating anything
-    // ==========================================
-
-    // 2a. Check professional schedule availability for selected days
-    const { data: schedules } = await supabase
-        .from('schedules')
-        .select('max_participants, start_time, end_time, day_of_week')
-        .eq('professional_id', data.professionalId)
-        .eq('is_active', true)
-        .in('day_of_week', data.scheduleDays)
-
-    if (!schedules || schedules.length === 0) {
-        return { error: 'O profissional não tem disponibilidade configurada para os dias selecionados.' }
-    }
-
-    // Map schedules by day_of_week (only matching the selected time)
-    const scheduleByDay: Record<number, { max_participants: number }> = {}
-    for (const s of schedules) {
-        const [schedStart] = s.start_time.split(':').map(Number)
-        const [schedEnd] = s.end_time.split(':').map(Number)
-        if (hour >= schedStart && hour < schedEnd) {
-            scheduleByDay[s.day_of_week] = s
-        }
-    }
-
-    // Validate that all selected days have a matching schedule at the chosen time
-    for (const d of data.scheduleDays) {
-        if (!scheduleByDay[d]) {
-            return { error: `O profissional não tem disponibilidade para ${dayNames[d]} às ${data.scheduleTime}.` }
-        }
-    }
-
-    // 2b. Check capacity and client conflicts for each appointment
-    for (const apt of appointments) {
-        const aptDate = new Date(apt.start_time)
-        const aptDayOfWeek = aptDate.getDay()
-        const formattedDate = aptDate.toLocaleDateString('pt-BR')
-
-        // Capacity check
-        const startOfHour = new Date(aptDate)
-        startOfHour.setMinutes(0, 0, 0)
-        const endOfHour = new Date(aptDate)
-        endOfHour.setMinutes(59, 59, 999)
-
-        const { count } = await supabase
-            .from('appointments')
-            .select('id', { count: 'exact' })
+        // Get service duration
+        const { data: serviceData } = await supabase
+            .from('professional_services')
+            .select(`
+                custom_duration_minutes,
+                services (
+                    duration_minutes
+                )
+            `)
             .eq('professional_id', data.professionalId)
-            .eq('status', 'scheduled')
-            .gte('start_time', startOfHour.toISOString())
-            .lte('start_time', endOfHour.toISOString())
+            .eq('service_id', data.serviceId)
+            .single()
 
-        const currentCount = count || 0
-        const maxParticipants = scheduleByDay[aptDayOfWeek]?.max_participants || 1
+        if (!serviceData) {
+            return { error: 'Serviço não encontrado para este profissional.' }
+        }
 
-        if (currentCount >= maxParticipants) {
-            return {
-                error: `Horário lotado em ${formattedDate} (${dayNames[aptDayOfWeek]}) às ${data.scheduleTime}. Capacidade: ${currentCount}/${maxParticipants}.`
+        const service = serviceData.services as unknown as { duration_minutes: number }
+        const durationMinutes = serviceData.custom_duration_minutes ?? service.duration_minutes
+
+        const [hour, minute] = data.scheduleTime.split(':').map(Number)
+        const [year, month, day] = data.startDate.split('-').map(Number)
+        const baseDate = new Date(year, month - 1, day)
+        const baseDayOfWeek = baseDate.getDay()
+
+        // Use months instead of weeks to define the end date (ensuring full month coverage)
+        // Treated 4 weeks as 1 month, 8 as 2, etc.
+        const numMonths = Math.ceil((data.weeks || 4) / 4)
+        const endDate = endOfMonth(addMonths(baseDate, numMonths - 1))
+        groupId = randomUUID()
+
+        const now = new Date()
+        const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
+
+        let week = 0
+        let checkingDate = new Date(baseDate)
+
+        // Loop through weeks. We check up to one week AFTER the end date 
+        // to ensure that if the month ends on a Monday but the plan started on a Wednesday,
+        // we still capture that last Monday.
+        const loopMaxDate = addWeeks(endDate, 1)
+        while (isBefore(checkingDate, loopMaxDate)) {
+            const weekBaseDate = addWeeks(baseDate, week)
+            checkingDate = weekBaseDate
+
+            for (const targetDay of data.scheduleDays) {
+                const dayDiff = targetDay - baseDayOfWeek
+                const startTime = new Date(weekBaseDate)
+                startTime.setDate(startTime.getDate() + dayDiff)
+                startTime.setHours(hour, minute, 0, 0)
+
+                // Skip past dates
+                if (startTime < now) continue
+                // Skip if after end date
+                if (!isBefore(startTime, endDate)) continue
+
+                const endTime = new Date(startTime.getTime() + durationMinutes * 60000)
+
+                appointments.push({
+                    tenant_id: tenantId,
+                    client_id: data.clientId,
+                    professional_id: data.professionalId,
+                    service_id: data.serviceId,
+                    start_time: startTime.toISOString(),
+                    end_time: endTime.toISOString(),
+                    status: 'scheduled',
+                    type: 'recurring',
+                    recurring_group_id: groupId,
+                })
+            }
+            week++
+            checkingDate = addWeeks(baseDate, week)
+        }
+
+        if (appointments.length === 0) {
+            return { error: 'Nenhum agendamento futuro pode ser gerado com os parâmetros informados.' }
+        }
+
+        // ==========================================
+        // 2. Validate ALL slots BEFORE creating anything
+        // ==========================================
+
+        // 2a. Check professional schedule availability for selected days
+        const { data: schedules } = await supabase
+            .from('schedules')
+            .select('max_participants, start_time, end_time, day_of_week')
+            .eq('professional_id', data.professionalId)
+            .eq('is_active', true)
+            .in('day_of_week', data.scheduleDays)
+
+        if (!schedules || schedules.length === 0) {
+            return { error: 'O profissional não tem disponibilidade configurada para os dias selecionados.' }
+        }
+
+        const scheduleByDay: Record<number, { max_participants: number }> = {}
+        for (const s of schedules) {
+            const [schedStart] = s.start_time.split(':').map(Number)
+            const [schedEnd] = s.end_time.split(':').map(Number)
+            if (hour >= schedStart && hour < schedEnd) {
+                scheduleByDay[s.day_of_week] = s
             }
         }
 
-        // Client conflict check
-        const { data: clientConflict } = await supabase
-            .from('appointments')
-            .select('id')
-            .eq('client_id', data.clientId)
-            .eq('start_time', apt.start_time)
-            .eq('status', 'scheduled')
-            .maybeSingle()
+        for (const d of data.scheduleDays) {
+            if (!scheduleByDay[d]) {
+                return { error: `O profissional não tem disponibilidade para ${dayNames[d]} às ${data.scheduleTime}.` }
+            }
+        }
 
-        if (clientConflict) {
-            return {
-                error: `O cliente já possui um agendamento em ${formattedDate} (${dayNames[aptDayOfWeek]}) às ${data.scheduleTime}.`
+        // 2b. Check capacity and client conflicts for each appointment
+        for (const apt of appointments) {
+            const aptDate = new Date(apt.start_time)
+            const aptDayOfWeek = aptDate.getDay()
+            const formattedDate = aptDate.toLocaleDateString('pt-BR')
+
+            const startOfHour = new Date(aptDate)
+            startOfHour.setMinutes(0, 0, 0)
+            const endOfHour = new Date(aptDate)
+            endOfHour.setMinutes(59, 59, 999)
+
+            const { count } = await supabase
+                .from('appointments')
+                .select('id', { count: 'exact' })
+                .eq('professional_id', data.professionalId)
+                .eq('status', 'scheduled')
+                .gte('start_time', startOfHour.toISOString())
+                .lte('start_time', endOfHour.toISOString())
+
+            const currentCount = count || 0
+            const maxParticipants = scheduleByDay[aptDayOfWeek]?.max_participants || 1
+
+            if (currentCount >= maxParticipants) {
+                return {
+                    error: `Horário lotado em ${formattedDate} (${dayNames[aptDayOfWeek]}) às ${data.scheduleTime}. Capacidade: ${currentCount}/${maxParticipants}.`
+                }
+            }
+
+            const { data: clientConflict } = await supabase
+                .from('appointments')
+                .select('id')
+                .eq('client_id', data.clientId)
+                .eq('start_time', apt.start_time)
+                .eq('status', 'scheduled')
+                .maybeSingle()
+
+            if (clientConflict) {
+                return {
+                    error: `O cliente já possui um agendamento em ${formattedDate} (${dayNames[aptDayOfWeek]}) às ${data.scheduleTime}.`
+                }
             }
         }
     }
 
     // ==========================================
-    // 3. All validations passed — now create membership + appointments
+    // 3. Create membership + handle credits
     // ==========================================
 
     // Cancel any existing active membership for this client
@@ -426,7 +449,7 @@ export async function createClientMembership(data: {
         .eq('tenant_id', tenantId)
         .eq('status', 'active')
 
-    // Create the membership with schedule config
+    // Create the membership
     const { error: membershipError } = await supabase
         .from('client_memberships')
         .insert({
@@ -436,10 +459,12 @@ export async function createClientMembership(data: {
             start_date: data.startDate,
             status: 'active',
             weekly_limit: plan.weekly_frequency || null,
-            professional_id: data.professionalId,
-            service_id: data.serviceId,
-            schedule_days: data.scheduleDays,
-            schedule_time: data.scheduleTime,
+            professional_id: isWeekly ? data.professionalId : null,
+            service_id: isWeekly ? data.serviceId : null,
+            schedule_days: isWeekly ? data.scheduleDays : null,
+            schedule_time: isWeekly ? data.scheduleTime : null,
+            renewal_duration_months: Math.ceil((data.weeks || 4) / 4),
+            next_renewal_date: format(addMonths(new Date(data.startDate), Math.ceil((data.weeks || 4) / 4)), 'yyyy-MM-01')
         })
 
     if (membershipError) {
@@ -447,20 +472,71 @@ export async function createClientMembership(data: {
         return { error: 'Falha ao atribuir plano.' }
     }
 
-    // Insert all validated appointments
-    const { error: insertError } = await supabase
-        .from('appointments')
-        .insert(appointments)
+    // Handle credits for Package or Monthly Credits plans
+    if (plan.plan_type === 'package' || plan.plan_type === 'monthly_credits') {
+        const creditsToAdd = plan.plan_type === 'package' ? plan.total_credits : plan.credits_per_month
 
-    if (insertError) {
-        console.error('Error creating recurring appointments:', insertError)
-        return { error: 'Plano atribuído mas houve erro ao gerar agendamentos.' }
+        if (creditsToAdd && creditsToAdd > 0) {
+            // Check for existing credit record
+            const { data: existingCredit } = await supabase
+                .from('credits')
+                .select('id, quantity')
+                .eq('client_id', data.clientId)
+                .eq('tenant_id', tenantId)
+                .maybeSingle()
+
+            if (existingCredit) {
+                await supabase
+                    .from('credits')
+                    .update({
+                        quantity: existingCredit.quantity + creditsToAdd,
+                        membership_plan_id: data.planId,
+                        origin_type: plan.plan_type === 'package' ? 'package' : 'plan'
+                    })
+                    .eq('id', existingCredit.id)
+            } else {
+                await supabase
+                    .from('credits')
+                    .insert({
+                        tenant_id: tenantId,
+                        client_id: data.clientId,
+                        quantity: creditsToAdd,
+                        membership_plan_id: data.planId,
+                        origin_type: plan.plan_type === 'package' ? 'package' : 'plan'
+                    })
+            }
+
+            // Log the change
+            await supabase.from('credit_logs').insert({
+                tenant_id: tenantId,
+                client_id: data.clientId,
+                quantity_change: creditsToAdd,
+                type: 'addition',
+                notes: `Ativação de plano: ${plan.name}`
+            })
+        }
+    }
+
+    // Insert appointments if weekly
+    if (isWeekly && appointments.length > 0) {
+        const { error: insertError } = await supabase
+            .from('appointments')
+            .insert(appointments)
+
+        if (insertError) {
+            console.error('Error creating recurring appointments:', insertError)
+            return { error: 'Plano atribuído mas houve erro ao gerar agendamentos.' }
+        }
+
+        revalidatePath(`/dashboard/clientes/${data.clientId}`)
+        revalidatePath('/dashboard/planos')
+        revalidatePath('/dashboard/agenda')
+        return { success: true, count: appointments.length }
     }
 
     revalidatePath(`/dashboard/clientes/${data.clientId}`)
     revalidatePath('/dashboard/planos')
-    revalidatePath('/dashboard/agenda')
-    return { success: true, count: appointments.length }
+    return { success: true, count: 0 }
 }
 
 export async function cancelClientMembership(membershipId: string) {
@@ -487,131 +563,152 @@ export async function cancelClientMembership(membershipId: string) {
 }
 
 // ==========================================
-// Generate Appointments for Active Memberships
+// Automated Renewal Process
 // ==========================================
 
-export async function generateMonthlyAppointments() {
+export async function processAutomatedRenewals() {
     const ctx = await getAuthContext()
     if (!ctx) throw new Error('Unauthorized')
-    if (ctx.role !== 'admin') throw new Error('Only admins can generate appointments')
 
     const { supabase, tenantId } = ctx
+    const today = format(new Date(), 'yyyy-MM-dd')
 
-    // Get all active memberships with schedule config
+    // 1. Get all active memberships that need renewal
     const { data: memberships, error: membershipError } = await supabase
         .from('client_memberships')
         .select(`
-            *,
-            membership_plans (*)
-        `)
+                *,
+                membership_plans (*)
+            `)
         .eq('tenant_id', tenantId)
         .eq('status', 'active')
-        .not('schedule_days', 'is', null)
+        .lte('next_renewal_date', today)
 
     if (membershipError) {
-        console.error('Error fetching memberships:', membershipError)
-        return { error: 'Falha ao buscar assinaturas.' }
+        console.error('Error fetching memberships for renewal:', membershipError)
+        return { error: 'Falha ao buscar assinaturas para renovação.' }
     }
 
     if (!memberships || memberships.length === 0) {
-        return { error: 'Nenhuma assinatura ativa com agendamento configurado.' }
+        return { success: true, count: 0, message: 'Nenhuma assinatura precisa de renovação hoje.' }
     }
 
-    const now = new Date()
-    let totalGenerated = 0
+    let totalRenewed = 0
 
     for (const membership of memberships) {
-        if (!membership.schedule_days || !membership.schedule_time || !membership.professional_id || !membership.service_id) continue
+        const plan = membership.membership_plans as any
+        const durationMonths = membership.renewal_duration_months || 1
+        const startDate = new Date(membership.next_renewal_date)
+        const endDate = endOfMonth(addMonths(startDate, durationMonths - 1))
 
-        // Get service duration
-        const { data: serviceData } = await supabase
-            .from('professional_services')
-            .select(`
-                custom_duration_minutes,
-                services (
-                    duration_minutes
-                )
-            `)
-            .eq('professional_id', membership.professional_id)
-            .eq('service_id', membership.service_id)
-            .single()
+        // -- Logic for Weekly Frequency (Appointments) --
+        if (plan.plan_type === 'weekly_frequency' && membership.schedule_days && membership.schedule_time) {
+            // logic to check up to one week after endDate to catch all days within the month
+            const loopMaxDate = addWeeks(endDate, 1)
 
-        if (!serviceData) continue
+            // Get service duration
+            const { data: serviceData } = await supabase
+                .from('professional_services')
+                .select('custom_duration_minutes, services(duration_minutes)')
+                .eq('professional_id', membership.professional_id)
+                .eq('service_id', membership.service_id)
+                .single()
 
-        const service = serviceData.services as unknown as { duration_minutes: number }
-        const durationMinutes = serviceData.custom_duration_minutes ?? service.duration_minutes
+            if (serviceData) {
+                const service = serviceData.services as any
+                const durationMinutes = serviceData.custom_duration_minutes ?? service.duration_minutes
+                const [hour, minute] = membership.schedule_time.split(':').map(Number)
+                const baseDayOfWeek = startDate.getDay()
+                const groupId = randomUUID()
 
-        const [hour, minute] = membership.schedule_time.split(':').map(Number)
-        const baseDate = new Date(now)
-        baseDate.setHours(0, 0, 0, 0)
-        const baseDayOfWeek = baseDate.getDay()
-        const monthEnd = endOfMonth(now)
-        const groupId = randomUUID()
+                const appointments = []
+                let week = 0
+                let checkingDate = new Date(startDate)
 
-        const appointments = []
+                while (isBefore(checkingDate, loopMaxDate)) {
+                    const weekBaseDate = addWeeks(startDate, week)
+                    checkingDate = weekBaseDate
 
-        // Loop through weeks until we pass the end of the month
-        let week = 0
-        let checkingDate = new Date(baseDate)
+                    for (const targetDay of membership.schedule_days) {
+                        const dayDiff = targetDay - baseDayOfWeek
+                        const startTime = new Date(weekBaseDate)
+                        startTime.setDate(startTime.getDate() + dayDiff)
+                        startTime.setHours(hour, minute, 0, 0)
 
-        while (isBefore(checkingDate, monthEnd)) {
-            const weekBaseDate = addWeeks(baseDate, week)
-            checkingDate = weekBaseDate // Update for loop condition
+                        if (startTime < startDate || !isBefore(startTime, endDate)) continue
 
-            for (const targetDay of membership.schedule_days) {
-                const dayDiff = targetDay - baseDayOfWeek
-                const startTime = new Date(weekBaseDate)
-                startTime.setDate(startTime.getDate() + dayDiff)
-                startTime.setHours(hour, minute, 0, 0)
+                        appointments.push({
+                            tenant_id: tenantId,
+                            client_id: membership.client_id,
+                            professional_id: membership.professional_id,
+                            service_id: membership.service_id,
+                            start_time: startTime.toISOString(),
+                            end_time: new Date(startTime.getTime() + durationMinutes * 60000).toISOString(),
+                            status: 'scheduled',
+                            type: 'recurring',
+                            recurring_group_id: groupId,
+                        })
+                    }
+                    week++
+                    checkingDate = addWeeks(startDate, week)
+                }
 
-                // Skip past dates
-                if (startTime < now) continue
-
-                const endTime = new Date(startTime.getTime() + durationMinutes * 60000)
-
-                // Check if appointment already exists at this time for this client
-                const { data: existing } = await supabase
-                    .from('appointments')
-                    .select('id')
-                    .eq('client_id', membership.client_id)
-                    .eq('start_time', startTime.toISOString())
-                    .eq('status', 'scheduled')
-                    .maybeSingle()
-
-                if (existing) continue // Skip — already has appointment
-
-                appointments.push({
-                    tenant_id: tenantId,
-                    client_id: membership.client_id,
-                    professional_id: membership.professional_id,
-                    service_id: membership.service_id,
-                    start_time: startTime.toISOString(),
-                    end_time: endTime.toISOString(),
-                    status: 'scheduled',
-                    type: 'recurring',
-                    recurring_group_id: groupId,
-                })
+                if (appointments.length > 0) {
+                    await supabase.from('appointments').insert(appointments)
+                }
             }
-            week++
-            checkingDate = addWeeks(baseDate, week)
         }
 
-        if (appointments.length > 0) {
-            const { error: insertError } = await supabase
-                .from('appointments')
-                .insert(appointments)
+        // -- Logic for Monthly Credits --
+        if (plan.plan_type === 'monthly_credits' && plan.credits_per_month) {
+            const creditsToAdd = plan.credits_per_month
 
-            if (!insertError) {
-                totalGenerated += appointments.length
+            const { data: existingCredit } = await supabase
+                .from('credits')
+                .select('id, quantity')
+                .eq('client_id', membership.client_id)
+                .eq('tenant_id', tenantId)
+                .maybeSingle()
+
+            if (existingCredit) {
+                await supabase
+                    .from('credits')
+                    .update({ quantity: existingCredit.quantity + creditsToAdd })
+                    .eq('id', existingCredit.id)
             } else {
-                console.error(`Error generating appointments for membership ${membership.id}:`, insertError)
+                await supabase
+                    .from('credits')
+                    .insert({
+                        tenant_id: tenantId,
+                        client_id: membership.client_id,
+                        quantity: creditsToAdd,
+                        membership_plan_id: plan.id,
+                        origin_type: 'plan'
+                    })
             }
+
+            await supabase.from('credit_logs').insert({
+                tenant_id: tenantId,
+                client_id: membership.client_id,
+                quantity_change: creditsToAdd,
+                type: 'addition',
+                notes: `Renovação automática: ${plan.name}`
+            })
         }
+
+        // Update next renewal date
+        const nextRenewal = format(addMonths(startDate, durationMonths), 'yyyy-MM-01')
+        await supabase
+            .from('client_memberships')
+            .update({ next_renewal_date: nextRenewal })
+            .eq('id', membership.id)
+
+        totalRenewed++
     }
 
     revalidatePath('/dashboard/agenda')
     revalidatePath('/dashboard/planos')
-    return { success: true, count: totalGenerated }
+    return { success: true, count: totalRenewed }
 }
 
 // ==========================================
