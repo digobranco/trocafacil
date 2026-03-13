@@ -124,24 +124,43 @@ export function CustomerTable({ initialCustomers }: CustomerTableProps) {
                                         const planName = activeMembership?.membership_plans?.name
                                         return (
                                             <TableRow key={customer.id} className={!customer.active ? 'opacity-60' : ''}>
-                                                <TableCell>
-                                                    <Link href={`/dashboard/clientes/${customer.id}`} className="text-indigo-600 hover:text-indigo-800 font-medium transition-colors">
+                                                <TableCell className="min-w-0">
+                                                    <Link href={`/dashboard/clientes/${customer.id}`} className="text-indigo-600 hover:text-indigo-800 font-medium transition-colors break-all">
                                                         {customer.full_name}
                                                     </Link>
                                                 </TableCell>
                                                 <TableCell className="text-sm">{customer.phone || '—'}</TableCell>
-                                                <TableCell className="text-sm truncate max-w-[180px]">{customer.email || '—'}</TableCell>
+                                                <TableCell className="text-sm break-all">{customer.email || '—'}</TableCell>
                                                 <TableCell>
                                                     <Badge variant={creditCount > 0 ? 'default' : 'outline'} className={creditCount > 0 ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-50 px-2" : "px-2"}>
                                                         {creditCount}
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell>
-                                                    {planName ? (
-                                                        <Badge className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-50 px-2">{planName}</Badge>
-                                                    ) : (
-                                                        <span className="text-xs text-slate-400">—</span>
-                                                    )}
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {customer.client_memberships
+                                                            ?.filter((m: any) => m.status === 'active')
+                                                            .map((m: any, idx: number, arr: any[]) => {
+                                                                if (idx === 0) {
+                                                                    return (
+                                                                        <Badge key={m.id} className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-50 px-2 whitespace-nowrap">
+                                                                            {m.membership_plans?.name}
+                                                                        </Badge>
+                                                                    )
+                                                                }
+                                                                if (idx === 1) {
+                                                                    return (
+                                                                        <Badge key="more" variant="outline" className="text-[10px] text-slate-500 border-slate-200 px-1">
+                                                                            +{arr.length - 1}
+                                                                        </Badge>
+                                                                    )
+                                                                }
+                                                                return null
+                                                            })}
+                                                        {!customer.client_memberships?.some((m: any) => m.status === 'active') && (
+                                                            <span className="text-xs text-slate-400">—</span>
+                                                        )}
+                                                    </div>
                                                 </TableCell>
                                                 <TableCell>
                                                     <Badge
@@ -172,17 +191,16 @@ export function CustomerTable({ initialCustomers }: CustomerTableProps) {
                         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                             {filteredAndSortedCustomers.map((customer) => {
                                 const creditCount = customer.credits?.[0]?.quantity || 0
-                                const activeMembership = customer.client_memberships?.find((m: any) => m.status === 'active')
-                                const planName = activeMembership?.membership_plans?.name
+                                const activeMemberships = customer.client_memberships?.filter((m: any) => m.status === 'active') || []
 
                                 return (
                                     <Card key={customer.id} className={!customer.active ? 'opacity-60' : ''}>
                                         <CardHeader className="pb-3">
-                                            <div className="flex items-start justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <Users className="h-5 w-5 text-primary" />
-                                                    <CardTitle className="text-lg">
-                                                        <Link href={`/dashboard/clientes/${customer.id}`} className="text-indigo-600 hover:text-indigo-800 transition-colors">
+                                            <div className="flex items-start justify-between gap-4">
+                                                <div className="flex items-start gap-2 min-w-0 flex-1">
+                                                    <Users className="h-5 w-5 text-primary shrink-0 mt-1" />
+                                                    <CardTitle className="text-lg min-w-0">
+                                                        <Link href={`/dashboard/clientes/${customer.id}`} className="text-indigo-600 hover:text-indigo-800 transition-colors break-all block">
                                                             {customer.full_name}
                                                         </Link>
                                                     </CardTitle>
@@ -190,8 +208,8 @@ export function CustomerTable({ initialCustomers }: CustomerTableProps) {
                                                 <Badge
                                                     variant={customer.active ? 'default' : 'secondary'}
                                                     className={customer.active
-                                                        ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-50"
-                                                        : "bg-red-50 text-red-700 border-red-200 hover:bg-red-50"
+                                                        ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-50 shrink-0"
+                                                        : "bg-red-50 text-red-700 border-red-200 hover:bg-red-50 shrink-0"
                                                     }
                                                 >
                                                     {customer.active ? 'Ativo' : 'Inativo'}
@@ -213,7 +231,7 @@ export function CustomerTable({ initialCustomers }: CustomerTableProps) {
                                                         <span className="text-muted-foreground flex items-center gap-1">
                                                             <Mail className="h-3.5 w-3.5" /> Email:
                                                         </span>
-                                                        <span className="font-medium truncate max-w-[180px]">{customer.email}</span>
+                                                        <span className="font-medium break-all ml-4 block text-right">{customer.email}</span>
                                                     </div>
                                                 )}
                                                 <div className="flex justify-between">
@@ -224,17 +242,21 @@ export function CustomerTable({ initialCustomers }: CustomerTableProps) {
                                                         {creditCount} {creditCount === 1 ? 'crédito' : 'créditos'}
                                                     </Badge>
                                                 </div>
-                                                <div className="flex justify-between">
+                                                <div className="flex flex-col gap-1">
                                                     <span className="text-muted-foreground flex items-center gap-1">
-                                                        <CalendarDays className="h-3.5 w-3.5" /> Plano:
+                                                        <CalendarDays className="h-3.5 w-3.5" /> Planos Ativos:
                                                     </span>
-                                                    {planName ? (
-                                                        <Badge className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-50 px-2 gap-1">
-                                                            {planName}
-                                                        </Badge>
-                                                    ) : (
-                                                        <Badge variant="outline" className="text-slate-400 px-2">Sem plano</Badge>
-                                                    )}
+                                                    <div className="flex flex-wrap gap-1 mt-1">
+                                                        {activeMemberships.length > 0 ? (
+                                                            activeMemberships.map((m: any) => (
+                                                                <Badge key={m.id} className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-50 px-2 gap-1 text-[11px]">
+                                                                    {m.membership_plans?.name}
+                                                                </Badge>
+                                                            ))
+                                                        ) : (
+                                                            <Badge variant="outline" className="text-slate-400 px-2">Sem plano ativo</Badge>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
 

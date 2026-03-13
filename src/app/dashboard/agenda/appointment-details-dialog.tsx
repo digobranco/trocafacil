@@ -212,8 +212,8 @@ export function AppointmentDetailsDialog({
                             {appointments.map((app) => (
                                 <div key={app.id} className={`p-4 border rounded-xl space-y-3 transition-all duration-300 ${getCardBg(app.status)}`}>
                                     <div className="flex items-start justify-between">
-                                        <div className="flex items-center gap-3">
-                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${app.status === 'completed' ? 'bg-green-100' : app.status === 'absent' ? 'bg-red-100' : app.status === 'justified_absence' ? 'bg-amber-100' : 'bg-slate-100'
+                                        <div className="flex items-start gap-3 min-w-0 flex-1">
+                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${app.status === 'completed' ? 'bg-green-100' : app.status === 'absent' ? 'bg-red-100' : app.status === 'justified_absence' ? 'bg-amber-100' : 'bg-slate-100'
                                                 }`}>
                                                 {app.status === 'completed'
                                                     ? <CheckCircle2 className="h-5 w-5 text-green-600" />
@@ -224,11 +224,11 @@ export function AppointmentDetailsDialog({
                                                             : <UserIcon className="h-5 w-5 text-slate-400" />
                                                 }
                                             </div>
-                                            <div>
-                                                <Link href={`/dashboard/clientes/${app.client_id}`} className="font-bold text-slate-800 hover:text-indigo-700 hover:underline">
+                                            <div className="min-w-0 flex-1">
+                                                <Link href={`/dashboard/clientes/${app.client_id}`} className="font-bold text-slate-800 hover:text-indigo-700 hover:underline break-all block">
                                                     {app.client?.full_name || 'Cliente'}
                                                 </Link>
-                                                <p className="text-xs text-muted-foreground">{app.service?.name}</p>
+                                                <p className="text-xs text-muted-foreground break-all">{app.service?.name}</p>
                                             </div>
                                         </div>
                                         <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">

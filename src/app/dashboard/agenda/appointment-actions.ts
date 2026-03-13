@@ -121,21 +121,52 @@ export async function createAppointment(data: CreateAppointmentData) {
     const totalSeries = Math.ceil(weeksToGenerate / weekInterval)
     const totalAppointments = totalSeries * targetDays.length
 
-    // Check credits for client with active membership or customer role
-    const { data: creditRow } = await supabase
+    // Check credits for client - multiple buckets support
+    const { data: creditRows } = await supabase
         .from('credits')
-        .select('id, quantity')
+        .select('id, quantity, service_restrictions, membership_plan_id')
         .eq('client_id', data.customerId)
         .eq('tenant_id', tenantId)
-        .maybeSingle()
+        .gt('quantity', 0)
 
-    const availableCredits = creditRow?.quantity || 0
-    const hasCredits = availableCredits > 0
+    const totalAvailable = creditRows?.reduce((acc, row) => acc + (row.quantity || 0), 0) || 0
+    
+    // Selection logic:
+    // 1. Buckets that specifically allow this service
+    // 2. Buckets with NO restrictions (Universal)
+    // 3. Earliest bucket (if multiple)
+    
+    let selectedBucket = null
+    if (creditRows && creditRows.length > 0) {
+        const matchingBuckets = creditRows.filter(row => {
+            const restrictions = row.service_restrictions as string[] | null
+            return restrictions === null || restrictions.length === 0 || restrictions.includes(data.serviceId)
+        })
 
-    // If client has credits (from plan or manual), validate availability
-    if (hasCredits && availableCredits < totalAppointments) {
-        return {
-            error: `O cliente possui apenas ${availableCredits} crédito(s) disponível(is), mas o agendamento requer ${totalAppointments}.`
+        if (matchingBuckets.length > 0) {
+            // Prioritize restricted buckets over universal ones
+            const restrictedMatch = matchingBuckets.find(row => 
+                (row.service_restrictions as string[] | null)?.includes(data.serviceId)
+            )
+            selectedBucket = restrictedMatch || matchingBuckets[0]
+        }
+    }
+
+    // If client needs credits, validate
+    if (totalAvailable < totalAppointments) {
+        // We only block if they definitely don't have enough TOTAL credits
+        // We also need to check if they have enough of the RIGHT credits
+        const matchingTotal = creditRows
+            ?.filter(row => {
+                const restrictions = row.service_restrictions as string[] | null
+                return restrictions === null || restrictions.length === 0 || restrictions.includes(data.serviceId)
+            })
+            .reduce((acc, row) => acc + (row.quantity || 0), 0) || 0
+
+        if (matchingTotal < totalAppointments) {
+            return {
+                error: `O cliente possui ${matchingTotal} crédito(s) compatíveis com este serviço, mas o agendamento requer ${totalAppointments}.`
+            }
         }
     }
 
@@ -143,6 +174,25 @@ export async function createAppointment(data: CreateAppointmentData) {
     if (role === 'customer' && data.recurrence && data.recurrence !== 'none') {
         return { error: 'Alunos não podem criar agendamentos recorrentes.' }
     }
+
+    // Check for holidays/closures
+    const proposedDates = targetDays.flatMap(day => {
+        const dates = []
+        for (let i = 0; i < weeksToGenerate; i += weekInterval) {
+            const weekBaseDate = addWeeks(baseDate, i)
+            const dayDiff = day - dayOfWeek
+            const startTime = new Date(weekBaseDate)
+            startTime.setDate(startTime.getDate() + dayDiff)
+            if (startTime >= new Date()) {
+                dates.push(startTime.toISOString().split('T')[0])
+            }
+        }
+        return dates
+    })
+
+    const { checkHolidays } = await import('../empresa/feriados/actions')
+    const conflicts = await checkHolidays(proposedDates.sort(), tenantId)
+    const holidayDates = new Set(conflicts.map(c => c.date))
 
     for (let i = 0; i < weeksToGenerate; i += weekInterval) {
         const weekBaseDate = addWeeks(baseDate, i)
@@ -153,6 +203,9 @@ export async function createAppointment(data: CreateAppointmentData) {
             startTime.setDate(startTime.getDate() + dayDiff)
 
             if (startTime < new Date()) continue
+            
+            // Skip if it's a holiday
+            if (holidayDates.has(startTime.toISOString().split('T')[0])) continue
 
             const endTime = new Date(startTime.getTime() + durationMinutes * 60000)
 
@@ -222,12 +275,12 @@ export async function createAppointment(data: CreateAppointmentData) {
         return { error: 'Falha ao criar agendamento.' }
     }
 
-    // Deduct credits if client has credits (from plan or manual)
-    if (hasCredits && creditRow) {
+    // Deduct credits if client has credits - using selected bucket
+    if (selectedBucket) {
         await supabase
             .from('credits')
-            .update({ quantity: Math.max(0, (creditRow.quantity || 0) - appointments.length) })
-            .eq('id', creditRow.id)
+            .update({ quantity: Math.max(0, (selectedBucket.quantity || 0) - appointments.length) })
+            .eq('id', selectedBucket.id)
 
         await supabase.from('credit_logs').insert({
             tenant_id: tenantId,
@@ -274,6 +327,7 @@ export async function deleteAppointment(appointmentId: string, scope: 'single' |
             id, 
             tenant_id, 
             client_id, 
+            service_id,
             start_time, 
             recurring_group_id,
             tenants (
@@ -341,30 +395,49 @@ export async function deleteAppointment(appointmentId: string, scope: 'single' |
             const validUntil = new Date()
             validUntil.setDate(validUntil.getDate() + validityDays)
 
-            const { data: existingCredit } = await supabase
+            // Fetch ALL credit buckets to find the best match
+            const { data: credits } = await supabase
                 .from('credits')
-                .select('id, quantity')
+                .select('id, quantity, service_restrictions, plan:membership_plan_id(name)')
                 .eq('client_id', appointment.client_id)
                 .eq('tenant_id', appointment.tenant_id)
-                .maybeSingle()
 
-            if (existingCredit) {
+            // Try to find matching bucket
+            const matchingBuckets = (credits || []).filter(row => {
+                const restrictions = row.service_restrictions as string[] | null
+                return !restrictions || restrictions.length === 0 || restrictions.includes(appointment.service_id)
+            })
+
+            let targetBucket = null
+            if (matchingBuckets.length > 0) {
+                // Prioritize restricted buckets over universal
+                targetBucket = matchingBuckets.find(row => 
+                    (row.service_restrictions as string[] | null)?.includes(appointment.service_id)
+                ) || matchingBuckets[0]
+            }
+
+            const cancellerLabel = role === 'admin' ? 'Administração' : 'Aluno'
+            const planLabel = targetBucket?.plan ? ` (Plano: ${(targetBucket.plan as any).name})` : ' (Geral)'
+            const notes = `Estorno: Cancelamento por ${cancellerLabel}${planLabel}`
+
+            if (targetBucket) {
                 await supabase
                     .from('credits')
                     .update({
-                        quantity: (existingCredit.quantity || 0) + 1,
+                        quantity: (targetBucket.quantity || 0) + 1,
                         valid_until: validUntil.toISOString()
                     })
-                    .eq('id', existingCredit.id)
+                    .eq('id', targetBucket.id)
 
                 await supabase.from('credit_logs').insert({
                     tenant_id: appointment.tenant_id,
                     client_id: appointment.client_id,
                     quantity_change: 1,
                     type: 'cancellation_refund',
-                    notes: 'Estorno por cancelamento antecipado'
+                    notes
                 })
             } else {
+                // If no bucket exists at all, create a general one
                 await supabase
                     .from('credits')
                     .insert({
@@ -379,7 +452,7 @@ export async function deleteAppointment(appointmentId: string, scope: 'single' |
                     client_id: appointment.client_id,
                     quantity_change: 1,
                     type: 'cancellation_refund',
-                    notes: 'Crédito inicial por cancelamento antecipado'
+                    notes: `Crédito inicial: Cancelamento por ${cancellerLabel}${planLabel}`
                 })
             }
         }
@@ -428,7 +501,7 @@ export async function updateAppointmentStatus(
         .update({ status })
         .eq('id', id)
         .eq('tenant_id', tenantId)
-        .select('client_id, tenants(credit_validity_days)')
+        .select('client_id, service_id, tenants(credit_validity_days)')
         .single()
 
     if (error) {
@@ -443,30 +516,48 @@ export async function updateAppointmentStatus(
         const validUntil = new Date()
         validUntil.setDate(validUntil.getDate() + validityDays)
 
-        const { data: existingCredit } = await supabase
+        // Fetch ALL credit buckets to find the best match
+        const { data: credits } = await supabase
             .from('credits')
-            .select('id, quantity')
+            .select('id, quantity, service_restrictions, plan:membership_plan_id(name)')
             .eq('client_id', appointment.client_id)
             .eq('tenant_id', tenantId)
-            .maybeSingle()
 
-        if (existingCredit) {
+        // Try to find matching bucket
+        const matchingBuckets = (credits || []).filter(row => {
+            const restrictions = row.service_restrictions as string[] | null
+            return !restrictions || restrictions.length === 0 || restrictions.includes(appointment.service_id)
+        })
+
+        let targetBucket = null
+        if (matchingBuckets.length > 0) {
+            // Prioritize restricted buckets over universal
+            targetBucket = matchingBuckets.find(row => 
+                (row.service_restrictions as string[] | null)?.includes(appointment.service_id)
+            ) || matchingBuckets[0]
+        }
+
+        const planLabel = targetBucket?.plan ? ` (Plano: ${(targetBucket.plan as any).name})` : ' (Geral)'
+        const notes = `Estorno: Falta Justificada pela Administração${planLabel}`
+
+        if (targetBucket) {
             await supabase
                 .from('credits')
                 .update({
-                    quantity: (existingCredit.quantity || 0) + 1,
+                    quantity: (targetBucket.quantity || 0) + 1,
                     valid_until: validUntil.toISOString()
                 })
-                .eq('id', existingCredit.id)
+                .eq('id', targetBucket.id)
 
             await supabase.from('credit_logs').insert({
                 tenant_id: tenantId,
                 client_id: appointment.client_id,
                 quantity_change: 1,
                 type: 'cancellation_refund',
-                notes: 'Crédito por falta justificada'
+                notes
             })
         } else {
+            // If no bucket exists, create a general one
             await supabase
                 .from('credits')
                 .insert({
@@ -481,7 +572,7 @@ export async function updateAppointmentStatus(
                 client_id: appointment.client_id,
                 quantity_change: 1,
                 type: 'cancellation_refund',
-                notes: 'Crédito inicial por falta justificada'
+                notes: `Crédito inicial: Falta Justificada pela Administração${planLabel}`
             })
         }
     }

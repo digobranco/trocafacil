@@ -18,7 +18,7 @@ import { AppointmentDialog } from './appointment-dialog'
 import { DayView } from './day-view'
 import { WeekView } from './week-view'
 import { MonthView } from './month-view'
-import { getAgendaPageData, getUserCredits } from './actions'
+import { getAgendaPageData, getUserCredits, type CreditBucket } from './actions'
 
 type ViewMode = 'day' | 'week' | 'month'
 
@@ -29,8 +29,9 @@ export default function AgendaPage() {
     const [professionals, setProfessionals] = useState<{ id: string; name: string }[]>([])
     const [selectedProfessional, setSelectedProfessional] = useState<string>('all')
     const [profile, setProfile] = useState<any>(null)
-    const [credits, setCredits] = useState<number>(0)
+    const [credits, setCredits] = useState<CreditBucket[]>([])
     const [onlyMyAgenda, setOnlyMyAgenda] = useState(false)
+    const [isHoliday, setIsHoliday] = useState<string | null>(null)
 
     // Search state: only show results after clicking Buscar
     const [hasSearched, setHasSearched] = useState(false)
@@ -41,13 +42,14 @@ export default function AgendaPage() {
 
     useEffect(() => {
         loadInitialData()
-    }, [])
+    }, [currentDate])
 
     async function loadInitialData() {
         const data = await getAgendaPageData(format(currentDate, 'yyyy-MM-dd'))
         setProfessionals(data.professionals)
         setProfile(data.user)
         setCredits(data.credits)
+        setIsHoliday(data.holiday)
     }
 
     const handleSearch = useCallback(() => {
@@ -119,11 +121,11 @@ export default function AgendaPage() {
                         selectedDate={currentDate}
                         defaultProfessionalId={searchedProfessional === 'all' ? '' : searchedProfessional}
                         onSuccess={handleRefresh}
-                        disabled={profile?.role === 'customer' && credits <= 0}
+                        disabled={(profile?.role === 'customer' && credits.reduce((acc, c) => acc + c.quantity, 0) <= 0) || !!isHoliday}
                         trigger={
-                            <Button size="sm" className="text-xs md:text-sm" disabled={profile?.role === 'customer' && credits <= 0}>
+                            <Button size="sm" className="text-xs md:text-sm" disabled={(profile?.role === 'customer' && credits.reduce((acc, c) => acc + c.quantity, 0) <= 0) || !!isHoliday}>
                                 <CalendarIcon className="mr-1 md:mr-2 h-4 w-4" />
-                                {profile?.role === 'customer' && credits <= 0 ? 'Sem Créditos' : 'Novo Agendamento'}
+                                {isHoliday ? 'Feriado/Recesso' : (profile?.role === 'customer' && credits.reduce((acc, c) => acc + c.quantity, 0) <= 0 ? 'Sem Créditos' : 'Novo Agendamento')}
                             </Button>
                         }
                     />

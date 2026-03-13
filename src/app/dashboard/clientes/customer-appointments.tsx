@@ -9,7 +9,7 @@ import {
     Clock,
     User as UserIcon,
     Briefcase,
-    Trash2,
+    CalendarClock,
     AlertTriangle,
     Plus,
     CalendarDays,
@@ -112,7 +112,7 @@ export function CustomerAppointments({ customerId }: CustomerAppointmentsProps) 
         <Card key={app.id} className={`border-l-4 ${getStatusBorder(app.status)} overflow-hidden`}>
             <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-3 flex-1">
+                    <div className="space-y-3 flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                             <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-100 flex items-center gap-1">
                                 <CalendarDays className="h-3 w-3" />
@@ -129,19 +129,19 @@ export function CustomerAppointments({ customerId }: CustomerAppointmentsProps) 
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            <div className="flex items-center gap-2 text-sm text-slate-600">
-                                <Briefcase className="h-4 w-4 text-slate-400" />
-                                <span className="font-medium">{app.service?.name || 'Sessão'}</span>
+                            <div className="flex items-start gap-2 text-sm text-slate-600 min-w-0">
+                                <Briefcase className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
+                                <span className="font-medium break-all">{app.service?.name || 'Sessão'}</span>
                             </div>
-                            <div className="flex items-center gap-2 text-sm text-slate-600">
-                                <UserIcon className="h-4 w-4 text-slate-400" />
-                                <span>{app.professional?.name || 'Profissional'}</span>
+                            <div className="flex items-start gap-2 text-sm text-slate-600 min-w-0">
+                                <UserIcon className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
+                                <span className="break-all">{app.professional?.name || 'Profissional'}</span>
                             </div>
                         </div>
                     </div>
 
                     {app.status === 'scheduled' && (
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 shrink-0 flex-wrap sm:flex-nowrap justify-end">
                             <Link href={`/dashboard/agenda/horario?start=${encodeURIComponent(app.start_time)}&prof=${app.professional_id}`}>
                                 <Button
                                     variant="outline"
@@ -178,7 +178,7 @@ export function CustomerAppointments({ customerId }: CustomerAppointmentsProps) 
                                     setShowDeleteDialog(true)
                                 }}
                             >
-                                <Trash2 className="h-4 w-4" />
+                                <CalendarClock className="h-4 w-4" />
                             </Button>
                         </div>
                     )}
@@ -240,14 +240,14 @@ export function CustomerAppointments({ customerId }: CustomerAppointmentsProps) 
             <CustomDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
                 <CustomDialogContent>
                     <CustomDialogHeader>
-                        <CustomDialogTitle className="flex items-center gap-2 text-red-600">
-                            <AlertTriangle className="h-5 w-5" />
-                            Excluir Agendamento
+                        <CustomDialogTitle className="flex items-center gap-2 text-indigo-600">
+                            <CalendarClock className="h-5 w-5" />
+                            Cancelar / Remarcar Horário
                         </CustomDialogTitle>
                         <CustomDialogDescription>
                             {isRecurring
-                                ? "Este agendamento faz parte de uma recorrência. O que você deseja excluir?"
-                                : "Tem certeza que deseja excluir este agendamento? Esta ação não pode ser desfeita."}
+                                ? "Este agendamento faz parte de uma recorrência. O que você deseja cancelar?"
+                                : "Tem certeza que deseja cancelar este agendamento? Esta ação não pode ser desfeita."}
                         </CustomDialogDescription>
                     </CustomDialogHeader>
                     <CustomDialogFooter className="flex flex-col sm:flex-row gap-2">
@@ -259,16 +259,17 @@ export function CustomerAppointments({ customerId }: CustomerAppointmentsProps) 
                         </Button>
                         <Button
                             variant="destructive"
+                            className="bg-indigo-600 hover:bg-indigo-700"
                             onClick={() => handleDelete('single')}
                         >
-                            Excluir apenas este
+                            Cancelar apenas este
                         </Button>
                         {isRecurring && (
                             <Button
                                 variant="destructive"
                                 onClick={() => handleDelete('series')}
                             >
-                                Excluir toda a série
+                                Cancelar toda a série
                             </Button>
                         )}
                     </CustomDialogFooter>

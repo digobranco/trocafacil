@@ -88,6 +88,11 @@ export function MonthView({ currentDate, onSelectDay, professionalId, onlyMyAgen
                             </div>
                             {data && isCurrentMonth && (
                                 <div className="space-y-1">
+                                    {data.holidayName && (
+                                        <Badge variant="outline" className="text-[10px] px-1 bg-red-50 text-red-600 border-red-200 truncate w-full" title={data.holidayName}>
+                                            {data.holidayName}
+                                        </Badge>
+                                    )}
                                     {data.userAppointmentsCount > 0 && (
                                         <Badge variant="secondary" className="text-[10px] px-1 bg-indigo-100 text-indigo-700 border-indigo-200">
                                             {data.userAppointmentsCount === 1 ? 'Meu horário' : `${data.userAppointmentsCount} agend.`}
@@ -95,21 +100,21 @@ export function MonthView({ currentDate, onSelectDay, professionalId, onlyMyAgen
                                     )}
                                     {!onlyMyAgenda && (
                                         <>
-                                            {data.appointmentsCount > 0 && (
+                                            {data.appointmentsCount > 0 && !data.holidayName && (
                                                 <Badge variant="outline" className="text-[10px] px-1 bg-slate-50 text-slate-600 border-slate-200">
                                                     {data.appointmentsCount} {data.appointmentsCount === 1 ? 'ocupado' : 'ocupados'}
                                                 </Badge>
                                             )}
-                                            {data.availableSlots > 0 ? (
+                                            {data.availableSlots > 0 && !data.holidayName ? (
                                                 <Badge variant="outline" className="text-[10px] px-1 text-green-700 border-green-300">
                                                     {data.availableSlots} {data.availableSlots === 1 ? 'vaga' : 'vagas'}
                                                 </Badge>
-                                            ) : data.appointmentsCount > 0 ? (
+                                            ) : data.appointmentsCount > 0 && !data.holidayName ? (
                                                 <Badge variant="destructive" className="text-[10px] px-1">
                                                     Lotado
                                                 </Badge>
                                             ) : null}
-                                            {!data.hasAvailability && (
+                                            {!data.hasAvailability && !data.holidayName && (
                                                 <div className="text-[10px] text-muted-foreground">Folga</div>
                                             )}
                                         </>

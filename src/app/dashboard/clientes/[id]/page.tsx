@@ -2,7 +2,7 @@ import { createClient } from '@/utils/supabase/server'
 import { notFound, redirect } from 'next/navigation'
 import { getCustomerDetails } from '../actions'
 import { Button } from '@/components/ui/button'
-import { ChevronLeft, User, Phone, Mail, Calendar, UserCheck, ShieldAlert, FileText, ExternalLink, Pencil, History } from 'lucide-react'
+import { ChevronLeft, User, Phone, Mail, Calendar, UserCheck, ShieldAlert, FileText, ExternalLink, Pencil, History, CreditCard } from 'lucide-react'
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { format } from 'date-fns'
@@ -18,6 +18,7 @@ import { EvolutionTimeline } from '../evolution-timeline'
 import { InviteButton } from '../invite-button'
 import { CustomerAppointments } from '../customer-appointments'
 import { ClientMembershipCard } from '../client-membership-card'
+import { PreAnamnesisLinkButton } from '../pre-anamnesis-link-button'
 
 interface Props {
     params: Promise<{ id: string }>
@@ -37,8 +38,7 @@ export default async function CustomerDetailsPage({ params }: Props) {
     }
 
     const linkedProfile = customer.linked_profile
-    // @ts-ignore
-    const creditCount = customer.credits?.[0]?.quantity || 0
+    const credits = customer.credits || []
 
     // We pass the customer id to the client component which will fetch membership data
 
@@ -53,11 +53,16 @@ export default async function CustomerDetailsPage({ params }: Props) {
                     </Button>
                     <div>
                         <h3 className="text-2xl font-bold tracking-tight">{customer.full_name}</h3>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
                             <span>Cliente desde {format(new Date(customer.created_at), "MMMM 'de' yyyy", { locale: ptBR })}</span>
                             <Badge variant={customer.active ? "default" : "secondary"} className={customer.active ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-50 px-3" : "bg-red-50 text-red-700 border-red-200 hover:bg-red-50 px-3"}>
                                 {customer.active ? "Ativo" : "Inativo"}
                             </Badge>
+                            {customer.client_memberships?.filter((m: any) => m.status === 'active').map((m: any) => (
+                                <Badge key={m.id} variant="outline" className="bg-blue-50 text-blue-700 border-blue-100 px-2 text-[10px]">
+                                    {m.membership_plans?.name}
+                                </Badge>
+                            ))}
                         </div>
                     </div>
                 </div>
@@ -106,6 +111,13 @@ export default async function CustomerDetailsPage({ params }: Props) {
                                         <div>
                                             <p className="text-xs font-semibold text-slate-500 uppercase">Email</p>
                                             <p className="font-medium">{customer.email || 'Não informado'}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50 border border-slate-100">
+                                        <CreditCard className="h-5 w-5 text-slate-400 mt-0.5" />
+                                        <div>
+                                            <p className="text-xs font-semibold text-slate-500 uppercase">CPF</p>
+                                            <p className="font-medium">{customer.cpf || 'Não informado'}</p>
                                         </div>
                                     </div>
                                 </CardContent>
@@ -170,9 +182,12 @@ export default async function CustomerDetailsPage({ params }: Props) {
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <CreditManager customerId={customer.id} initialCredits={creditCount} />
+                            <CreditManager customerId={customer.id} credits={credits} />
                         </CardContent>
                     </Card>
+
+                    {/* Pre-Anamnesis Link */}
+                    <PreAnamnesisLinkButton customerId={customer.id} customerName={customer.full_name} />
 
                     {/* Account Linking Section */}
                     <Card>

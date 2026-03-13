@@ -10,6 +10,7 @@ export type DaySummary = {
     userAppointmentsCount: number
     availableSlots: number
     hasAvailability: boolean
+    holidayName?: string
 }
 
 // Shared logic for fetching day summaries over a date range
@@ -39,14 +40,23 @@ async function getAgendaSummary(ctx: AuthContext, rangeStart: Date, rangeEnd: Da
         schedulesQuery = schedulesQuery.eq('professional_id', professionalId)
     }
 
-    // PARALLEL fetch: appointments + schedules at the same time
-    const [appointmentsRes, schedulesRes] = await Promise.all([
+    const holidaysQuery = ctx.supabase
+        .from('holidays')
+        .select('name, start_date, end_date')
+        .or(`tenant_id.eq.${ctx.tenantId},is_national.eq.true`)
+        .gte('end_date', rangeStart.toISOString().split('T')[0])
+        .lte('start_date', rangeEnd.toISOString().split('T')[0])
+
+    // PARALLEL fetch: appointments + schedules + holidays
+    const [appointmentsRes, schedulesRes, holidaysRes] = await Promise.all([
         appointmentsQuery,
-        schedulesQuery
+        schedulesQuery,
+        holidaysQuery
     ])
 
     const appointments = appointmentsRes.data
     const schedules = schedulesRes.data
+    const holidays = holidaysRes.data || []
 
     // Calculate daily capacity from schedules
     const dailyCapacity = new Map<number, number>()
@@ -79,13 +89,20 @@ async function getAgendaSummary(ctx: AuthContext, rangeStart: Date, rangeEnd: Da
             }
         })
 
+        const holiday = holidays.find(h => {
+            const hStart = new Date(h.start_date)
+            const hEnd = new Date(h.end_date)
+            return day >= hStart && day <= hEnd
+        })
+
         return {
             date: dayStr,
             dayOfWeek,
             appointmentsCount: dayAppointments.length,
             userAppointmentsCount: dayUserAppointments.length,
             availableSlots: Math.max(0, capacity - dayAppointments.length),
-            hasAvailability: activeDays.has(dayOfWeek)
+            hasAvailability: activeDays.has(dayOfWeek),
+            holidayName: holiday?.name
         }
     })
 }

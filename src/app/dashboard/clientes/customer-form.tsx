@@ -8,12 +8,15 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { createCustomer, updateCustomer } from './actions'
 
+import { validateCPF, formatCPF } from '@/utils/validation'
+
 interface CustomerFormProps {
     customer?: {
         id: string
         full_name: string | null
         phone: string | null
         email: string | null
+        cpf?: string | null
         notes: string | null
         active?: boolean
     }
@@ -24,6 +27,7 @@ export function CustomerForm({ customer, onSuccess }: CustomerFormProps) {
     const isEditing = !!customer
     const [loading, setLoading] = useState(false)
     const [phone, setPhone] = useState(customer?.phone || '')
+    const [cpf, setCpf] = useState(customer?.cpf ? formatCPF(customer.cpf) : '')
     const [active, setActive] = useState(customer?.active ?? true)
 
     // Phone mask function
@@ -46,7 +50,20 @@ export function CustomerForm({ customer, onSuccess }: CustomerFormProps) {
         setPhone(value)
     }
 
+    // CPF mask function
+    const handleCPFChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const formatted = formatCPF(e.target.value)
+        setCpf(formatted)
+    }
+
     async function handleSubmit(formData: FormData) {
+        // Validate CPF if provided
+        const cpfValue = formData.get('cpf') as string
+        if (cpfValue && !validateCPF(cpfValue)) {
+            alert('CPF inválido. Verifique o número informado.')
+            return
+        }
+
         setLoading(true)
 
         // Add active status to formData
@@ -110,6 +127,19 @@ export function CustomerForm({ customer, onSuccess }: CustomerFormProps) {
                 />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="cpf" className="text-right">
+                    CPF
+                </Label>
+                <Input
+                    id="cpf"
+                    name="cpf"
+                    className="col-span-3"
+                    placeholder="000.000.000-00"
+                    value={cpf}
+                    onChange={handleCPFChange}
+                />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="notes" className="text-right">
                     Obs.
                 </Label>
@@ -146,3 +176,4 @@ export function CustomerForm({ customer, onSuccess }: CustomerFormProps) {
         </form>
     )
 }
+

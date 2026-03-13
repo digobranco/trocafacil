@@ -19,10 +19,11 @@ import {
     Clock,
 } from 'lucide-react'
 import { getDashboardStats, getAvailableSlots, getOnboardingProgress, getNextAppointment } from './dashboard-actions'
-import { getActiveClientMembership } from './planos/actions'
+import { getActiveClientMemberships } from './planos/actions'
 import { DashboardFiltered } from './dashboard-filtered'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+import { getPlanTypeLabel } from './planos/utils'
 import { OnboardingChecklist } from '@/components/dashboard/onboarding-checklist'
 
 export default async function DashboardPage() {
@@ -73,11 +74,14 @@ export default async function DashboardPage() {
             .maybeSingle()
         const customerId = customerData?.id
 
-        const [credits, membership, nextApt] = await Promise.all([
+        const [creditsData, memberships, nextApt] = await Promise.all([
             getUserCredits(),
-            customerId ? getActiveClientMembership(customerId) : Promise.resolve(null),
+            customerId ? getActiveClientMemberships(customerId) : Promise.resolve([]),
             customerId ? getNextAppointment(customerId) : Promise.resolve(null)
         ])
+
+        const totalCredits = creditsData.reduce((acc, c) => acc + c.quantity, 0)
+        const primaryMembership = memberships[0]
 
         return (
             <div className="space-y-6">
@@ -90,7 +94,7 @@ export default async function DashboardPage() {
                     </div>
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <div className="grid gap-4 md:grid-cols-2">
                     {/* Credits Card */}
                     <Card className="border-indigo-100 bg-indigo-50/30">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -98,45 +102,13 @@ export default async function DashboardPage() {
                             <CreditCard className="h-4 w-4 text-indigo-600" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-bold text-indigo-700">{credits}</div>
-                            <p className="text-xs text-indigo-600/70 mt-1">Disponíveis para uso</p>
+                            <div className="text-3xl font-bold text-indigo-700">{totalCredits}</div>
+                            <p className="text-xs text-indigo-600/70 mt-1">Créditos totais disponíveis</p>
                             <Link href="/dashboard/meus-creditos">
                                 <Button variant="link" size="sm" className="px-0 h-auto mt-4 text-xs">
                                     <History className="h-3 w-3 mr-1" /> Ver histórico completo
                                 </Button>
                             </Link>
-                        </CardContent>
-                    </Card>
-
-                    {/* Membership Card */}
-                    <Card className="border-purple-100 bg-purple-50/30">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Meu Plano</CardTitle>
-                            <Award className="h-4 w-4 text-purple-600" />
-                        </CardHeader>
-                        <CardContent>
-                            {membership ? (
-                                <>
-                                    <div className="text-lg font-bold text-purple-700">
-                                        {membership.membership_plans?.name}
-                                    </div>
-                                    <p className="text-xs text-purple-600/70 mt-1">
-                                        {membership.membership_plans?.weekly_frequency
-                                            ? `${membership.membership_plans.weekly_frequency}x por semana`
-                                            : 'Plano ativo'}
-                                    </p>
-                                    <div className="flex gap-1 mt-3">
-                                        <Badge variant="outline" className="text-[10px] bg-white text-purple-600 border-purple-200">
-                                            {membership.status === 'active' ? 'Assinado' : membership.status}
-                                        </Badge>
-                                    </div>
-                                </>
-                            ) : (
-                                <>
-                                    <div className="text-lg font-bold text-gray-400">Nenhum plano ativo</div>
-                                    <p className="text-xs text-gray-500 mt-1">Fale com a recepção para assinar</p>
-                                </>
-                            )}
                         </CardContent>
                     </Card>
 
@@ -175,6 +147,67 @@ export default async function DashboardPage() {
                         </CardContent>
                     </Card>
                 </div>
+
+                {/* Memberships Card - Full Width */}
+                <Card className="border-purple-100 bg-purple-50/30">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Meus Planos Ativos</CardTitle>
+                        <Award className="h-4 w-4 text-purple-600" />
+                    </CardHeader>
+                    <CardContent>
+                        {memberships.length > 0 ? (
+                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                {memberships.map((membership) => {
+                                    const plan = membership.membership_plans
+                                    if (!plan) return null
+                                    return (
+                                        <div key={membership.id} className="p-4 rounded-lg bg-white border border-purple-100 space-y-3 shadow-sm">
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-bold text-purple-900">{plan.name}</span>
+                                                <Badge className="bg-purple-500 text-[9px] h-4">ATIVO</Badge>
+                                            </div>
+                                            <div className="text-xs text-purple-700 space-y-2 font-medium">
+                                                <div className="flex items-center gap-2">
+                                                    <Award className="h-3.5 w-3.5 text-purple-400" />
+                                                    {getPlanTypeLabel(plan.plan_type)}
+                                                    {plan.plan_type === 'weekly_frequency' && (
+                                                        <span> • {plan.weekly_frequency}x/semana</span>
+                                                    )}
+                                                </div>
+
+                                                {membership.schedule_days && membership.schedule_days.length > 0 && (
+                                                    <div className="flex items-center gap-2">
+                                                        <CalendarRange className="h-3.5 w-3.5 text-purple-400" />
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {membership.schedule_days.map(d => (
+                                                                <span key={d} className="bg-purple-50 px-1 rounded">{['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'][d]}</span>
+                                                            ))}
+                                                        </div>
+                                                        {membership.schedule_time && <span className="ml-1">às {membership.schedule_time}</span>}
+                                                    </div>
+                                                )}
+
+                                                <div className="flex items-start gap-2">
+                                                    <Users className="h-3.5 w-3.5 text-purple-400 mt-0.5" />
+                                                    <span className="leading-tight">
+                                                        {membership.services?.name || 'Serviço'} com <br />
+                                                        <span className="text-purple-900">{membership.professionals?.name || 'Profissional'}</span>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        ) : (
+                            <div className="text-center py-10">
+                                <Award className="h-8 w-8 text-slate-300 mx-auto mb-3" />
+                                <div className="text-lg font-bold text-slate-400">Nenhum plano ativo</div>
+                                <p className="text-sm text-slate-500 mt-1">Fale com a recepção para assinar um plano e começar seus treinos.</p>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
 
                 {/* Additional Client Quick Actions or Info could go here */}
             </div>

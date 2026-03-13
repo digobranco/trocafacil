@@ -221,9 +221,9 @@ export async function getClientMemberships(clientId?: string) {
     return data as ClientMembership[]
 }
 
-export async function getActiveClientMembership(clientId: string) {
+export async function getActiveClientMemberships(clientId: string) {
     const ctx = await getAuthContext()
-    if (!ctx) return null
+    if (!ctx) return []
 
     const { data, error } = await ctx.supabase
         .from('client_memberships')
@@ -236,14 +236,14 @@ export async function getActiveClientMembership(clientId: string) {
         .eq('tenant_id', ctx.tenantId)
         .eq('client_id', clientId)
         .eq('status', 'active')
-        .maybeSingle()
+        .order('created_at', { ascending: false })
 
     if (error) {
-        console.error('Error fetching active membership:', error)
-        return null
+        console.error('Error fetching active memberships:', error)
+        return []
     }
 
-    return data as ClientMembership | null
+    return data as ClientMembership[]
 }
 
 export async function createClientMembership(data: {
@@ -318,6 +318,29 @@ export async function createClientMembership(data: {
         const now = new Date()
         const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
 
+        // Pre-fetch holidays to skip them
+        const proposedDates = []
+        let tempWeek = 0
+        let tempCheckingDate = new Date(baseDate)
+        const tempLoopMaxDate = addWeeks(endDate, 1)
+        while (isBefore(tempCheckingDate, tempLoopMaxDate)) {
+            const weekBaseDate = addWeeks(baseDate, tempWeek)
+            for (const targetDay of data.scheduleDays) {
+                const dayDiff = targetDay - baseDayOfWeek
+                const startTime = new Date(weekBaseDate)
+                startTime.setDate(startTime.getDate() + dayDiff)
+                if (startTime >= now && isBefore(startTime, endDate)) {
+                    proposedDates.push(startTime.toISOString().split('T')[0])
+                }
+            }
+            tempWeek++
+            tempCheckingDate = addWeeks(baseDate, tempWeek)
+        }
+
+        const { checkHolidays } = await import('../empresa/feriados/actions')
+        const conflicts = await checkHolidays(proposedDates.sort(), tenantId)
+        const holidayDates = new Set(conflicts.map(c => c.date))
+
         let week = 0
         let checkingDate = new Date(baseDate)
 
@@ -339,6 +362,8 @@ export async function createClientMembership(data: {
                 if (startTime < now) continue
                 // Skip if after end date
                 if (!isBefore(startTime, endDate)) continue
+                // Skip if it's a holiday
+                if (holidayDates.has(startTime.toISOString().split('T')[0])) continue
 
                 const endTime = new Date(startTime.getTime() + durationMinutes * 60000)
 
@@ -441,13 +466,8 @@ export async function createClientMembership(data: {
     // 3. Create membership + handle credits
     // ==========================================
 
-    // Cancel any existing active membership for this client
-    await supabase
-        .from('client_memberships')
-        .update({ status: 'cancelled', end_date: new Date().toISOString().split('T')[0] })
-        .eq('client_id', data.clientId)
-        .eq('tenant_id', tenantId)
-        .eq('status', 'active')
+    // Multiple plans support: We no longer cancel existing memberships automatically.
+    // Each plan is managed independently.
 
     // Create the membership
     const { error: membershipError } = await supabase
@@ -478,11 +498,13 @@ export async function createClientMembership(data: {
 
         if (creditsToAdd && creditsToAdd > 0) {
             // Check for existing credit record
+            // Check for existing credit record FOR THIS SPECIFIC PLAN
             const { data: existingCredit } = await supabase
                 .from('credits')
                 .select('id, quantity')
                 .eq('client_id', data.clientId)
                 .eq('tenant_id', tenantId)
+                .eq('membership_plan_id', data.planId)
                 .maybeSingle()
 
             if (existingCredit) {
@@ -490,7 +512,7 @@ export async function createClientMembership(data: {
                     .from('credits')
                     .update({
                         quantity: existingCredit.quantity + creditsToAdd,
-                        membership_plan_id: data.planId,
+                        service_restrictions: plan.service_restrictions,
                         origin_type: plan.plan_type === 'package' ? 'package' : 'plan'
                     })
                     .eq('id', existingCredit.id)
@@ -502,6 +524,7 @@ export async function createClientMembership(data: {
                         client_id: data.clientId,
                         quantity: creditsToAdd,
                         membership_plan_id: data.planId,
+                        service_restrictions: plan.service_restrictions,
                         origin_type: plan.plan_type === 'package' ? 'package' : 'plan'
                     })
             }
@@ -622,6 +645,27 @@ export async function processAutomatedRenewals() {
                 const groupId = randomUUID()
 
                 const appointments = []
+                const proposedDates = []
+                let tempWeek = 0
+                let tempCheckingDate = new Date(startDate)
+                while (isBefore(tempCheckingDate, loopMaxDate)) {
+                    const weekBaseDate = addWeeks(startDate, tempWeek)
+                    for (const targetDay of membership.schedule_days) {
+                        const dayDiff = targetDay - baseDayOfWeek
+                        const startTime = new Date(weekBaseDate)
+                        startTime.setDate(startTime.getDate() + dayDiff)
+                        if (startTime >= startDate && isBefore(startTime, endDate)) {
+                            proposedDates.push(startTime.toISOString().split('T')[0])
+                        }
+                    }
+                    tempWeek++
+                    tempCheckingDate = addWeeks(startDate, tempWeek)
+                }
+
+                const { checkHolidays } = await import('../empresa/feriados/actions')
+                const conflicts = await checkHolidays(proposedDates.sort(), tenantId)
+                const holidayDates = new Set(conflicts.map(c => c.date))
+
                 let week = 0
                 let checkingDate = new Date(startDate)
 
@@ -636,6 +680,7 @@ export async function processAutomatedRenewals() {
                         startTime.setHours(hour, minute, 0, 0)
 
                         if (startTime < startDate || !isBefore(startTime, endDate)) continue
+                        if (holidayDates.has(startTime.toISOString().split('T')[0])) continue
 
                         appointments.push({
                             tenant_id: tenantId,

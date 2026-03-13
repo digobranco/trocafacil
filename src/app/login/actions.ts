@@ -67,11 +67,12 @@ export async function signup(formData: FormData) {
         password: formData.get('password') as string,
         options: {
             emailRedirectTo: `${origin}/auth/callback`,
-            data: {
-                full_name: formData.get('full_name') as string || 'Novo Usuário',
-                phone: formData.get('phone') as string || null,
-                invite_code: inviteCode && inviteCode.trim() !== '' ? inviteCode.trim() : null
-            }
+        data: {
+            full_name: formData.get('full_name') as string || 'Novo Usuário',
+            phone: formData.get('phone') as string || null,
+            cpf: (formData.get('cpf') as string)?.replace(/\D/g, '') || null,
+            invite_code: inviteCode && inviteCode.trim() !== '' ? inviteCode.trim() : null
+        }
         },
     }
 

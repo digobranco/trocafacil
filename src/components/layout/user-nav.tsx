@@ -43,6 +43,10 @@ export function UserNav({ email }: { email: string }) {
                     </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => router.push('/dashboard/configuracoes')}>
+                    Meu Perfil
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={signOut}>
                     Sair
                 </DropdownMenuItem>

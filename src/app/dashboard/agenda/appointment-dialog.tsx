@@ -21,7 +21,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Plus, CalendarPlus, Repeat } from 'lucide-react'
 import { createAppointment, getAppointmentFormData } from './appointment-actions'
-import { getCurrentUser } from './actions'
+import { getCurrentUser, getUserCredits, type CreditBucket } from './actions'
 import { format } from 'date-fns'
 import { getAvailableServices } from '../profissionais/[id]/servicos/actions'
 
@@ -44,6 +44,7 @@ export function AppointmentDialog({ selectedDate, selectedTime, defaultProfessio
         professionals: { id: string; name: string }[]
         services: { id: string; name: string; duration_minutes: number }[]
     }>({ customers: [], professionals: [], services: [] })
+    const [credits, setCredits] = useState<CreditBucket[]>([])
 
     const [customerId, setCustomerId] = useState(initialCustomerId || '')
     const [professionalId, setProfessionalId] = useState(defaultProfessionalId || '')
@@ -80,13 +81,15 @@ export function AppointmentDialog({ selectedDate, selectedTime, defaultProfessio
     }, [open, defaultProfessionalId, initialCustomerId])
 
     async function loadInitialData() {
-        const [userData, formFields] = await Promise.all([
+        const [userData, formFields, creditData] = await Promise.all([
             getCurrentUser(),
-            getAppointmentFormData()
+            getAppointmentFormData(),
+            getUserCredits()
         ])
 
         setUser(userData)
         setFormData(formFields)
+        setCredits(creditData)
 
         if (userData?.role === 'customer') {
             setCustomerId(userData.customer_id || '')
@@ -243,6 +246,38 @@ export function AppointmentDialog({ selectedDate, selectedTime, defaultProfessio
                         </Select>
                     </div>
 
+                    {customerId && serviceId && (
+                        <div className="ml-[calc(25%+1rem)] space-y-2">
+                            {(() => {
+                                const matchingBuckets = credits.filter(c =>
+                                    !c.service_restrictions ||
+                                    c.service_restrictions.length === 0 ||
+                                    c.service_restrictions.includes(serviceId)
+                                )
+                                const totalMatch = matchingBuckets.reduce((acc, c) => acc + c.quantity, 0)
+
+                                if (totalMatch === 0) {
+                                    return (
+                                        <div className="text-[10px] text-red-600 font-medium bg-red-50 p-2 rounded-md border border-red-100 italic">
+                                            ⚠️ Você não possui créditos disponíveis para este serviço.
+                                        </div>
+                                    )
+                                }
+
+                                return (
+                                    <div className="text-[10px] text-indigo-700 font-medium bg-indigo-50 p-2 rounded-md border border-indigo-100">
+                                        <p>✅ {totalMatch} crédito(s) disponível(is) para este serviço:</p>
+                                        <ul className="list-disc list-inside mt-1 opacity-80">
+                                            {matchingBuckets.map((b, i) => (
+                                                <li key={i}>{b.name}: {b.quantity}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )
+                            })()}
+                        </div>
+                    )}
+
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label className="text-right">Data *</Label>
                         <Input
@@ -266,7 +301,7 @@ export function AppointmentDialog({ selectedDate, selectedTime, defaultProfessio
                         />
                     </div>
 
-                    {user?.role !== 'customer' && (
+                    {/*{user?.role !== 'customer' && (
                         <div className="border-t pt-4 mt-2">
                             <div className="flex items-center gap-2 mb-3 text-sm font-medium">
                                 <Repeat className="h-4 w-4" />
@@ -330,7 +365,7 @@ export function AppointmentDialog({ selectedDate, selectedTime, defaultProfessio
                                 </>
                             )}
                         </div>
-                    )}
+                    )}*/}
 
                     <div className="flex justify-end pt-4">
                         <Button

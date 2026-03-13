@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Calendar, Users, Settings, Home, Dumbbell, UserCog, Building, CreditCard, BarChart3, FileText } from 'lucide-react'
+import { Calendar as CalendarIcon, Users, Settings, Home, Dumbbell, UserCog, Building, CreditCard, BarChart3, FileText, User } from 'lucide-react'
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
     role?: 'super_admin' | 'admin' | 'professional' | 'customer'
@@ -31,7 +31,12 @@ export function Sidebar({ className, role = 'customer', onNavigate, tenantLogo, 
         {
             title: 'Minha Agenda',
             href: '/dashboard/agenda',
-            icon: Calendar,
+            icon: CalendarIcon,
+        },
+        {
+            title: 'Meu Perfil',
+            href: '/dashboard/configuracoes',
+            icon: User,
         },
     ]
 
@@ -79,6 +84,11 @@ export function Sidebar({ className, role = 'customer', onNavigate, tenantLogo, 
             title: 'Anamnese',
             href: '/dashboard/empresa/anamnesis',
             icon: FileText,
+        },
+        {
+            title: 'Feriados',
+            href: '/dashboard/empresa/feriados',
+            icon: CalendarIcon,
         },
     ]
 

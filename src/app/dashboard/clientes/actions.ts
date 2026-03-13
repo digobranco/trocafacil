@@ -12,6 +12,7 @@ export async function updateCustomer(formData: FormData) {
     const name = formData.get('name') as string
     const phone = formData.get('phone') as string
     const email = formData.get('email') as string
+    const cpf = (formData.get('cpf') as string)?.replace(/\D/g, '')
     const notes = formData.get('notes') as string
     const active = formData.get('active') === 'true'
 
@@ -25,6 +26,7 @@ export async function updateCustomer(formData: FormData) {
             full_name: name,
             phone,
             email,
+            cpf,
             notes,
             active
         })
@@ -48,6 +50,7 @@ export async function createCustomer(formData: FormData) {
     const name = formData.get('name') as string
     const phone = formData.get('phone') as string
     const email = formData.get('email') as string
+    const cpf = (formData.get('cpf') as string)?.replace(/\D/g, '')
     const notes = formData.get('notes') as string
 
     const { error } = await ctx.supabase
@@ -57,6 +60,7 @@ export async function createCustomer(formData: FormData) {
             full_name: name,
             phone,
             email,
+            cpf,
             notes,
             active: true
         })
@@ -80,7 +84,7 @@ export async function getCustomerDetails(id: string) {
         .from('customers')
         .select(`
             *,
-            credits(quantity)
+            credits(id, quantity, service_restrictions, membership_plan_id, plan:membership_plan_id(name))
         `)
         .eq('id', id)
         .eq('tenant_id', ctx.tenantId)
@@ -117,6 +121,7 @@ export async function adjustCustomerCredits(customerId: string, delta: number) {
         .select('id, quantity')
         .eq('client_id', customerId)
         .eq('tenant_id', ctx.tenantId)
+        .is('membership_plan_id', null) // Adjust "General" credits by default
         .maybeSingle()
 
     if (creditRecord) {

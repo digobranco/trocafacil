@@ -9,33 +9,46 @@ export async function getCurrentUser() {
     return ctx?.profile || null
 }
 
-// Re-export getUserCredits using shared context
-export async function getUserCredits() {
-    const ctx = await getAuthContext()
-    if (!ctx || ctx.role !== 'customer' || !ctx.identityId) return 0
-
-    const { data: credit } = await ctx.supabase
-        .from('credits')
-        .select('quantity')
-        .eq('client_id', ctx.identityId)
-        .eq('tenant_id', ctx.tenantId)
-        .maybeSingle()
-
-    return credit?.quantity || 0
+export type CreditBucket = {
+    id: string
+    quantity: number
+    name: string
+    service_restrictions: string[] | null
 }
 
-// Internal credit resolver (uses existing context)
-async function getCreditsInternal(ctx: AuthContext): Promise<number> {
-    if (ctx.role !== 'customer' || !ctx.identityId) return 0
+export async function getUserCredits() {
+    const ctx = await getAuthContext()
+    if (!ctx || ctx.role !== 'customer' || !ctx.identityId) return []
 
-    const { data: credit } = await ctx.supabase
+    return getCreditsInternal(ctx)
+}
+
+async function getCreditsInternal(ctx: AuthContext): Promise<CreditBucket[]> {
+    if (ctx.role !== 'customer' || !ctx.identityId) return []
+
+    const { data: credits, error } = await ctx.supabase
         .from('credits')
-        .select('quantity')
+        .select(`
+            id,
+            quantity,
+            service_restrictions,
+            plan:membership_plan_id (name)
+        `)
         .eq('client_id', ctx.identityId)
         .eq('tenant_id', ctx.tenantId)
-        .maybeSingle()
+        .gt('quantity', 0)
 
-    return credit?.quantity || 0
+    if (error) {
+        console.error('Error fetching credits:', error)
+        return []
+    }
+
+    return (credits || []).map(c => ({
+        id: c.id,
+        quantity: c.quantity,
+        name: (c.plan as any)?.name || 'Créditos Avulsos',
+        service_restrictions: c.service_restrictions as string[] | null
+    }))
 }
 
 export type Schedule = {
@@ -289,10 +302,10 @@ export async function getDailyAgenda(dateStr: string, professionalId?: string): 
  */
 export async function getAgendaPageData(dateStr: string, professionalId?: string) {
     const ctx = await getAuthContext()
-    if (!ctx) return { user: null, credits: 0, professionals: [], slots: [] }
+    if (!ctx) return { user: null, credits: [], professionals: [], slots: [], holiday: null }
 
-    // Fetch credits, professionals, and agenda slots ALL IN PARALLEL
-    const [credits, professionalsRes, slots] = await Promise.all([
+    // Fetch credits, professionals, agenda slots and holiday ALL IN PARALLEL
+    const [credits, professionalsRes, slots, holidayRes] = await Promise.all([
         getCreditsInternal(ctx),
         ctx.supabase
             .from('professionals')
@@ -300,13 +313,21 @@ export async function getAgendaPageData(dateStr: string, professionalId?: string
             .eq('tenant_id', ctx.tenantId)
             .eq('active', true)
             .order('name'),
-        getDailyAgendaInternal(ctx, dateStr, professionalId)
+        getDailyAgendaInternal(ctx, dateStr, professionalId),
+        ctx.supabase
+            .from('holidays')
+            .select('name')
+            .or(`tenant_id.eq.${ctx.tenantId},is_national.eq.true`)
+            .lte('start_date', dateStr)
+            .gte('end_date', dateStr)
+            .maybeSingle()
     ])
 
     return {
         user: ctx.profile,
         credits,
         professionals: professionalsRes.data || [],
-        slots
+        slots,
+        holiday: holidayRes.data?.name || null
     }
 }

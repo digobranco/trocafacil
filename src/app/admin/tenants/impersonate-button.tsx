@@ -33,7 +33,7 @@ export function ImpersonateButton({ tenantId }: ImpersonateButtonProps) {
             title="Visualizar como este tenant"
         >
             <Eye className="h-4 w-4 mr-1" />
-            {isPending ? 'Entrando...' : 'Visualizar'}
+            {isPending ? 'Entrando...' : 'Logar como'}
         </Button>
     )
 }

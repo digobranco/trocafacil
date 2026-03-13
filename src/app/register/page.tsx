@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { signup } from '../login/actions'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
+import { validateCPF, formatCPF } from '@/utils/validation'
 
 function RegisterForm() {
     const searchParams = useSearchParams()
@@ -15,6 +16,7 @@ function RegisterForm() {
     const nameParam = searchParams.get('name')
 
     const [phone, setPhone] = useState('')
+    const [cpf, setCpf] = useState('')
     const [loading, setLoading] = useState(false)
 
     const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -34,7 +36,18 @@ function RegisterForm() {
         setPhone(value)
     }
 
+    const handleCPFChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setCpf(formatCPF(e.target.value))
+    }
+
     async function handleSignup(formData: FormData) {
+        // Validate CPF if provided
+        const cpfValue = formData.get('cpf') as string
+        if (cpfValue && !validateCPF(cpfValue)) {
+            alert('CPF inválido. Verifique o número informado.')
+            return
+        }
+
         setLoading(true)
         try {
             await signup(formData)
@@ -80,21 +93,38 @@ function RegisterForm() {
                             />
                         </div>
 
-                        <div>
-                            <label htmlFor="phone" className="text-sm font-medium mb-1 block">
-                                Telefone
-                            </label>
-                            <input
-                                id="phone"
-                                name="phone"
-                                type="tel"
-                                required
-                                value={phone}
-                                onChange={handlePhoneChange}
-                                autoComplete="off"
-                                className="relative block w-full rounded-md border-0 py-1.5 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 px-3"
-                                placeholder="(00) 00000-0000"
-                            />
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label htmlFor="phone" className="text-sm font-medium mb-1 block">
+                                    Telefone/WhatsApp
+                                </label>
+                                <input
+                                    id="phone"
+                                    name="phone"
+                                    type="tel"
+                                    required
+                                    value={phone}
+                                    onChange={handlePhoneChange}
+                                    autoComplete="off"
+                                    className="relative block w-full rounded-md border-0 py-1.5 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 px-3"
+                                    placeholder="(00) 00000-0000"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="cpf" className="text-sm font-medium mb-1 block">
+                                    CPF (Opcional)
+                                </label>
+                                <input
+                                    id="cpf"
+                                    name="cpf"
+                                    type="text"
+                                    value={cpf}
+                                    onChange={handleCPFChange}
+                                    autoComplete="off"
+                                    className="relative block w-full rounded-md border-0 py-1.5 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 px-3"
+                                    placeholder="000.000.000-00"
+                                />
+                            </div>
                         </div>
 
                         <div>
@@ -128,6 +158,7 @@ function RegisterForm() {
                             />
                         </div>
                     </div>
+
 
                     <div className="flex flex-col gap-4 mt-6">
                         <Button

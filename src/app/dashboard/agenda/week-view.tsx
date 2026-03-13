@@ -68,6 +68,11 @@ export function WeekView({ currentDate, onSelectDay, professionalId, onlyMyAgend
                                 </div>
                             </div>
                             <div className="flex flex-wrap gap-1 sm:flex-col sm:items-center">
+                                {day.holidayName && (
+                                    <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200">
+                                        {day.holidayName}
+                                    </Badge>
+                                )}
                                 {day.userAppointmentsCount > 0 && (
                                     <Badge variant="secondary" className="text-[10px] bg-indigo-100 text-indigo-700 border-indigo-200">
                                         {day.userAppointmentsCount === 1 ? 'Meu horário' : `${day.userAppointmentsCount} agend.`}
@@ -77,25 +82,27 @@ export function WeekView({ currentDate, onSelectDay, professionalId, onlyMyAgend
                                     <>
                                         {day.hasAvailability ? (
                                             <>
-                                                {day.appointmentsCount > 0 && (
+                                                {day.appointmentsCount > 0 && !day.holidayName && (
                                                     <Badge variant="outline" className="text-[10px] bg-slate-50 text-slate-600 border-slate-200">
                                                         {day.appointmentsCount} {day.appointmentsCount === 1 ? 'sessão' : 'sessões'}
                                                     </Badge>
                                                 )}
-                                                {day.availableSlots > 0 ? (
+                                                {day.availableSlots > 0 && !day.holidayName ? (
                                                     <Badge variant="outline" className="text-xs text-green-700 border-green-300">
                                                         {day.availableSlots} {day.availableSlots === 1 ? 'vaga' : 'vagas'}
                                                     </Badge>
-                                                ) : (
+                                                ) : day.appointmentsCount > 0 && !day.holidayName ? (
                                                     <Badge variant="destructive" className="text-xs">
                                                         Lotado
                                                     </Badge>
-                                                )}
+                                                ) : null}
                                             </>
                                         ) : (
-                                            <Badge variant="secondary" className="text-xs">
-                                                Folga
-                                            </Badge>
+                                            !day.holidayName && (
+                                                <Badge variant="secondary" className="text-xs">
+                                                    Folga
+                                                </Badge>
+                                            )
                                         )}
                                     </>
                                 )}

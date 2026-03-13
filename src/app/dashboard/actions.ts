@@ -156,7 +156,7 @@ export async function regenerateProfessionalInviteCode() {
 
 export async function joinTenantByCode(formData: FormData) {
     const supabase = await createClient()
-    const inviteCode = formData.get('invite_code') as string
+    const inviteCode = (formData.get('invite_code') as string)?.trim()
 
     if (!inviteCode) return { error: 'Código de convite é obrigatório.' }
 
@@ -164,27 +164,32 @@ export async function joinTenantByCode(formData: FormData) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('Unauthorized')
 
-    // Find tenant by invite code
+    // Find tenant by any of the 3 invite codes
     const { data: tenant, error: tenantError } = await supabase
         .from('tenants')
-        .select('id, is_active')
-        .eq('invite_code', inviteCode.trim())
-        .single()
+        .select('id, is_active, invite_code, admin_invite_code, professional_invite_code')
+        .or(`invite_code.eq."${inviteCode}",admin_invite_code.eq."${inviteCode}",professional_invite_code.eq."${inviteCode}"`)
+        .maybeSingle()
 
     if (tenantError || !tenant) {
-        return { error: 'Código de convite inválido.' }
+        return { error: 'Código de convite inválido ou empresa não encontrada.' }
     }
 
     if (!tenant.is_active) {
         return { error: 'Esta empresa não está aceitando novos membros no momento.' }
     }
 
+    // Determine role based on which code was used
+    let role: 'admin' | 'professional' | 'customer' = 'customer'
+    if (tenant.admin_invite_code === inviteCode) role = 'admin'
+    else if (tenant.professional_invite_code === inviteCode) role = 'professional'
+
     // Update profile
     const { error: profileError } = await supabase
         .from('profiles')
         .update({
             tenant_id: tenant.id,
-            role: 'customer' // Default to customer, admin will promote later
+            role: role
         })
         .eq('id', user.id)
 
@@ -193,19 +198,77 @@ export async function joinTenantByCode(formData: FormData) {
         return { error: 'Erro ao vincular-se à empresa.' }
     }
 
-    // Also create a customer record for CRM/Booking
-    const { data: profile } = await supabase.from('profiles').select('full_name, phone, email').eq('id', user.id).single()
-    await supabase.from('customers').insert({
-        tenant_id: tenant.id,
-        profile_id: user.id,
-        full_name: profile?.full_name || 'Novo Cliente',
-        phone: profile?.phone,
-        email: profile?.email
-    })
+    // Get the current profile data to sync with customers/professionals
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name, phone, email, cpf')
+        .eq('id', user.id)
+        .single()
+
+    // Robust CPF check: try profile first, then fallback to auth metadata
+    const userCpf = profile?.cpf || (user.user_metadata?.cpf as string)?.replace(/\D/g, '')
+
+    // Also create or link a customer record for CRM/Booking if role is customer
+    if (role === 'customer') {
+        const { data: existingCustomer } = await supabase
+            .from('customers')
+            .select('id')
+            .eq('tenant_id', tenant.id)
+            .eq('email', profile?.email)
+            .maybeSingle()
+
+        if (existingCustomer) {
+            await supabase.from('customers').update({
+                profile_id: user.id,
+                full_name: profile?.full_name || 'Novo Cliente',
+                phone: profile?.phone,
+                cpf: userCpf
+            }).eq('id', existingCustomer.id)
+        } else {
+            await supabase.from('customers').insert({
+                tenant_id: tenant.id,
+                profile_id: user.id,
+                full_name: profile?.full_name || 'Novo Cliente',
+                phone: profile?.phone,
+                email: profile?.email,
+                cpf: userCpf
+            })
+        }
+    } 
+    // Or professional record if role is professional
+    else if (role === 'professional') {
+        const { data: existingProfessional } = await supabase
+            .from('professionals')
+            .select('id')
+            .eq('tenant_id', tenant.id)
+            .eq('email', profile?.email)
+            .maybeSingle()
+
+        if (existingProfessional) {
+            await supabase.from('professionals').update({
+                profile_id: user.id,
+                name: profile?.full_name || 'Novo Profissional',
+                phone: profile?.phone,
+                cpf: userCpf
+            }).eq('id', existingProfessional.id)
+        } else {
+            await supabase.from('professionals').insert({
+                tenant_id: tenant.id,
+                profile_id: user.id,
+                name: profile?.full_name || 'Novo Profissional',
+                phone: profile?.phone,
+                email: profile?.email,
+                cpf: userCpf,
+                active: true
+            })
+        }
+    }
+
 
     revalidatePath('/dashboard', 'layout')
     return { success: true }
 }
+
 
 export async function updateUserRole(targetUserId: string, newRole: 'admin' | 'professional' | 'customer') {
     const supabase = await createClient()
@@ -317,3 +380,53 @@ export async function uploadTenantLogo(formData: FormData) {
     revalidatePath('/dashboard', 'layout')
     return { success: true, logoUrl }
 }
+
+export async function updateUserProfile(formData: FormData) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Unauthorized')
+
+    const fullName = formData.get('full_name') as string
+    const phone = formData.get('phone') as string
+    const cpf = (formData.get('cpf') as string)?.replace(/\D/g, '')
+
+    // Update Profile
+    const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+            full_name: fullName,
+            phone: phone,
+            cpf: cpf
+        })
+        .eq('id', user.id)
+
+    if (profileError) {
+        console.error('Update Profile Error:', profileError)
+        return { error: 'Erro ao atualizar perfil.' }
+    }
+
+    // Sync with Customers
+    await supabase
+        .from('customers')
+        .update({
+            full_name: fullName,
+            phone: phone,
+            cpf: cpf
+        })
+        .eq('profile_id', user.id)
+
+    // Sync with Professionals
+    await supabase
+        .from('professionals')
+        .update({
+            name: fullName,
+            phone: phone,
+            cpf: cpf
+        })
+        .eq('profile_id', user.id)
+
+    revalidatePath('/dashboard/configuracoes')
+    return { success: true }
+}
+
+

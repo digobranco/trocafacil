@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import { getAgendaPageData, getDailyAgenda, AgendaSlot } from './actions'
 import { Button } from '@/components/ui/button'
 import { AppointmentDialog } from './appointment-dialog'
-import { User as UserIcon, Briefcase, Clock, Users, Trash2, AlertTriangle, CheckSquare, Eye } from 'lucide-react'
+import { User as UserIcon, Briefcase, Clock, Users, CalendarClock, AlertTriangle, CheckSquare, Eye } from 'lucide-react'
 import { AppointmentDetailsDialog } from './appointment-details-dialog'
 import { deleteAppointment } from './appointment-actions'
 import Link from 'next/link'
@@ -33,9 +33,10 @@ export function DayView({ currentDate, onRefresh, professionalId, onlyMyAgenda }
     const [loading, setLoading] = useState(false)
     const [currentUser, setCurrentUser] = useState<any>(null)
     const [credits, setCredits] = useState<number>(0)
-    const [deletingId, setDeletingId] = useState<string | null>(null)
+    const [holiday, setHoliday] = useState<string | null>(null)
+    const [cancellingId, setCancellingId] = useState<string | null>(null)
     const [isRecurring, setIsRecurring] = useState(false)
-    const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+    const [showCancelDialog, setShowCancelDialog] = useState(false)
     const [detailsOpen, setDetailsOpen] = useState(false)
     const [selectedSlot, setSelectedSlot] = useState<{ time: string, professionalId: string } | null>(null)
 
@@ -51,6 +52,7 @@ export function DayView({ currentDate, onRefresh, professionalId, onlyMyAgenda }
             setCurrentUser(data.user)
             setCredits(data.credits)
             setSlots(data.slots)
+            setHoliday(data.holiday)
         } catch (error) {
             console.error(error)
         } finally {
@@ -73,17 +75,17 @@ export function DayView({ currentDate, onRefresh, professionalId, onlyMyAgenda }
         onRefresh?.()
     }
 
-    async function handleDelete(scope: 'single' | 'series') {
-        if (!deletingId) return
+    async function handleCancel(scope: 'single' | 'series') {
+        if (!cancellingId) return
 
         try {
-            const res = await deleteAppointment(deletingId, scope)
+            const res = await deleteAppointment(cancellingId, scope)
             if (res.success) {
                 const creditMsg = res.creditGenerated
                     ? '\n\nUm crédito de reposição foi gerado conforme a política de cancelamento.'
                     : '\n\nCancelamento realizado fora do prazo. Nenhum crédito foi gerado.'
 
-                alert(`Agendamento excluído com sucesso!${currentUser?.role === 'customer' ? creditMsg : ''}`)
+                alert(`Cancelamento realizado com sucesso!${currentUser?.role === 'customer' ? creditMsg : ''}`)
                 loadAgenda()
                 onRefresh?.()
             } else {
@@ -91,10 +93,10 @@ export function DayView({ currentDate, onRefresh, professionalId, onlyMyAgenda }
             }
         } catch (error) {
             console.error(error)
-            alert('Erro ao excluir agendamento.')
+            alert('Erro ao cancelar agendamento.')
         } finally {
-            setShowDeleteDialog(false)
-            setDeletingId(null)
+            setShowCancelDialog(false)
+            setCancellingId(null)
         }
     }
 
@@ -152,6 +154,12 @@ export function DayView({ currentDate, onRefresh, professionalId, onlyMyAgenda }
 
     return (
         <div className="grid gap-3">
+            {holiday && (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center gap-2 mb-2 font-medium">
+                    <AlertTriangle className="h-5 w-5" />
+                    Hoje é feriado/recesso: {holiday}. Novos agendamentos estão bloqueados.
+                </div>
+            )}
             {displayedSlots.map((slot, index) => (
                 <Card key={index} className={`border-l-4 ${getStatusColor(slot.status)}`}>
                     <CardHeader className="py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -225,48 +233,53 @@ export function DayView({ currentDate, onRefresh, professionalId, onlyMyAgenda }
 
                                     return (
                                         <div key={i} className={`p-3 rounded-lg text-sm border ${statusBg}`}>
-                                            <div className="flex items-center justify-between gap-2 mb-1">
-                                                <div className="flex items-center gap-2">
-                                                    <Briefcase className="h-4 w-4 text-indigo-600" />
-                                                    <span className="font-semibold text-indigo-700">
-                                                        {app.service?.name || 'Sessão'}
-                                                    </span>
-                                                    {isOwner && (
-                                                        <Badge variant="outline" className="text-[10px] uppercase bg-white text-indigo-600 border-indigo-200">Meu Horário</Badge>
-                                                    )}
-                                                    {app.status === 'completed' && (
-                                                        <Badge className="text-[10px] bg-green-600">Presente</Badge>
-                                                    )}
-                                                    {app.status === 'absent' && (
-                                                        <Badge variant="destructive" className="text-[10px]">Falta</Badge>
-                                                    )}
+                                            <div className="flex items-start justify-between gap-2 mb-1">
+                                                <div className="flex items-start gap-2 min-w-0 flex-1">
+                                                    <Briefcase className="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" />
+                                                    <div className="flex flex-wrap items-center gap-2 min-w-0">
+                                                        <span className="font-semibold text-indigo-700 break-all">
+                                                            {app.service?.name || 'Sessão'}
+                                                        </span>
+                                                        {isOwner && (
+                                                            <Badge variant="outline" className="text-[10px] uppercase bg-white text-indigo-600 border-indigo-200 shrink-0">Meu Horário</Badge>
+                                                        )}
+                                                        {app.status === 'completed' && (
+                                                            <Badge className="text-[10px] bg-green-600 shrink-0">Presente</Badge>
+                                                        )}
+                                                        {app.status === 'absent' && (
+                                                            <Badge variant="destructive" className="text-[10px] shrink-0">Falta</Badge>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                                <div className="flex items-center gap-1">
+                                                <div className="flex items-center gap-1 shrink-0">
                                                     {canSeeDetails && (
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
-                                                            className="h-7 w-7 text-red-400 hover:text-red-600 hover:bg-red-50"
+                                                            className="h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50"
                                                             onClick={() => {
-                                                                setDeletingId(app.id)
+                                                                setCancellingId(app.id)
                                                                 setIsRecurring(app.type === 'recurring')
-                                                                setShowDeleteDialog(true)
+                                                                setShowCancelDialog(true)
                                                             }}
+                                                            title="Cancelar / Remarcar"
                                                         >
-                                                            <Trash2 className="h-4 w-4" />
+                                                            <CalendarClock className="h-4 w-4" />
                                                         </Button>
                                                     )}
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                <UserIcon className="h-4 w-4 text-slate-500" />
-                                                {canSeeDetails ? (
-                                                    <Link href={`/dashboard/clientes/${app.client_id}`} className="text-indigo-700 hover:underline font-medium">
-                                                        {app.client?.full_name || 'Cliente'}
-                                                    </Link>
-                                                ) : (
-                                                    <span className="text-slate-700">Ocupado</span>
-                                                )}
+                                            <div className="flex items-start gap-2 min-w-0">
+                                                <UserIcon className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
+                                                <div className="min-w-0 flex-1">
+                                                    {canSeeDetails ? (
+                                                        <Link href={`/dashboard/clientes/${app.client_id}`} className="text-indigo-700 hover:underline font-medium break-all block">
+                                                            {app.client?.full_name || 'Cliente'}
+                                                        </Link>
+                                                    ) : (
+                                                        <span className="text-slate-700 break-all block">Ocupado</span>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     )
@@ -274,8 +287,8 @@ export function DayView({ currentDate, onRefresh, professionalId, onlyMyAgenda }
                             </div>
                         )}
 
-                        {/* Show add button if not full AND not in My Agenda mode */}
-                        {!onlyMyAgenda && slot.status !== 'busy' && (
+                        {/* Show add button if not full AND not in My Agenda mode AND not a holiday */}
+                        {!onlyMyAgenda && slot.status !== 'busy' && !holiday && (
                             <AppointmentDialog
                                 selectedDate={currentDate}
                                 selectedTime={slot.time}
@@ -301,38 +314,39 @@ export function DayView({ currentDate, onRefresh, professionalId, onlyMyAgenda }
                 </Card>
             ))}
 
-            <CustomDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+            <CustomDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
                 <CustomDialogContent>
                     <CustomDialogHeader>
-                        <CustomDialogTitle className="flex items-center gap-2 text-red-600">
-                            <AlertTriangle className="h-5 w-5" />
-                            Excluir Agendamento
+                        <CustomDialogTitle className="flex items-center gap-2 text-indigo-600">
+                            <CalendarClock className="h-5 w-5" />
+                            Cancelar / Remarcar Horário
                         </CustomDialogTitle>
                         <CustomDialogDescription>
                             {isRecurring
-                                ? "Este agendamento faz parte de uma recorrência. O que você deseja excluir?"
-                                : "Tem certeza que deseja excluir este agendamento? Esta ação não pode ser desfeita."}
+                                ? "Este agendamento faz parte de uma recorrência. O que você deseja cancelar?"
+                                : "Tem certeza que deseja cancelar este agendamento? Se estiver dentro do prazo, você receberá um crédito de reposição."}
                         </CustomDialogDescription>
                     </CustomDialogHeader>
                     <CustomDialogFooter className="flex flex-col sm:flex-row gap-2">
                         <Button
                             variant="outline"
-                            onClick={() => setShowDeleteDialog(false)}
+                            onClick={() => setShowCancelDialog(false)}
                         >
-                            Cancelar
+                            Voltar
                         </Button>
                         <Button
-                            variant="destructive"
-                            onClick={() => handleDelete('single')}
+                            variant="default"
+                            className="bg-indigo-600 hover:bg-indigo-700"
+                            onClick={() => handleCancel('single')}
                         >
-                            Excluir apenas este
+                            Cancelar apenas este
                         </Button>
                         {isRecurring && currentUser?.role !== 'customer' && (
                             <Button
                                 variant="destructive"
-                                onClick={() => handleDelete('series')}
+                                onClick={() => handleCancel('series')}
                             >
-                                Excluir toda a série
+                                Cancelar toda a série
                             </Button>
                         )}
                     </CustomDialogFooter>
